@@ -236,6 +236,7 @@ internal static class SmokeTest
             SourceLanguage = "ja",
             ScreenBounds = line.Bounds,
             Quad = line.Quad,
+            Origin = line.Origin,
             Appearance = new TextAppearance
             {
                 FillR = 245,

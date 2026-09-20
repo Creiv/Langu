@@ -43,7 +43,8 @@ public static class OcrAutoRouter
                 Text = extra.Text.Trim(),
                 Bounds = current.Bounds,
                 Quad = current.Quad,
-                Confidence = Math.Max(current.Confidence, extra.Confidence)
+                Confidence = Math.Max(current.Confidence, extra.Confidence),
+                Origin = current.Origin
             };
         }
 
@@ -79,7 +80,8 @@ public static class OcrAutoRouter
                 Text = line.Text,
                 Bounds = bounds,
                 Quad = TextQuad.FromRect(bounds),
-                Confidence = line.Confidence
+                Confidence = line.Confidence,
+                Origin = line.Origin
             };
         }
 

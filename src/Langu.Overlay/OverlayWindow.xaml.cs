@@ -313,6 +313,12 @@ public partial class OverlayWindow : Window, IOverlayController
                 item)
         };
 
+        if (item.Origin == OcrBoxOrigin.Windows && item.Kind == OverlayItemKind.Translated)
+        {
+            var text = string.IsNullOrWhiteSpace(item.TranslatedText) ? item.SourceText : item.TranslatedText;
+            return BuildWindowsLabel(item, text, fill, x, y, w, h, rotate);
+        }
+
         var root = new Grid
         {
             Width = w,
@@ -334,6 +340,70 @@ public partial class OverlayWindow : Window, IOverlayController
 
         if (child is not null)
             root.Children.Add(child);
+        Canvas.SetLeft(root, Math.Round(x));
+        Canvas.SetTop(root, Math.Round(y));
+        return root;
+    }
+
+    private UIElement BuildWindowsLabel(
+        OverlayItem item,
+        string text,
+        Color fill,
+        double x,
+        double y,
+        double w,
+        double h,
+        double rotate)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var layout = WindowsOverlayLayout.Measure(
+            text,
+            item.SourceText,
+            w,
+            h,
+            item.Appearance,
+            Math.Max(0.75, dpi),
+            item.Appearance.Bold);
+        if (layout.Width > w)
+        {
+            var extra = layout.Width - w;
+            if (layout.Center)
+                x -= extra / 2;
+            w = layout.Width;
+        }
+
+        var root = new Canvas
+        {
+            Width = w,
+            Height = h,
+            ClipToBounds = false,
+            IsHitTestVisible = false,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = Math.Abs(rotate) >= 1 ? new RotateTransform(rotate) : Transform.Identity
+        };
+        root.Children.Add(new Border
+        {
+            Width = w,
+            Height = h,
+            Background = new SolidColorBrush(fill),
+            IsHitTestVisible = false
+        });
+        if (item.Highlighted)
+        {
+            root.Children.Add(new Border
+            {
+                Width = w,
+                Height = h,
+                Background = new SolidColorBrush(Color.FromArgb(
+                    0x46, item.Appearance.TextR, item.Appearance.TextG, item.Appearance.TextB)),
+                IsHitTestVisible = false
+            });
+        }
+
+        var glyphs = new OverlayGlyphs(layout.Text);
+        Canvas.SetLeft(glyphs, layout.Left);
+        Canvas.SetTop(glyphs, layout.Top);
+        root.Children.Add(glyphs);
         Canvas.SetLeft(root, Math.Round(x));
         Canvas.SetTop(root, Math.Round(y));
         return root;
@@ -392,7 +462,7 @@ public partial class OverlayWindow : Window, IOverlayController
 
         var sourceLines = item.SourceText.Replace("\r\n", "\n").Count(c => c == '\n') + 1;
         var wrap = (display.Contains('\n') || sourceLines >= 2) && boxH >= 28;
-        var fontSize = Math.Clamp(boxH * 0.86, 7, 96);
+        var fontSize = OverlayFont.LineSize(boxH, item.Origin);
         var label = new TextBlock
         {
             Text = display,
@@ -404,8 +474,13 @@ public partial class OverlayWindow : Window, IOverlayController
             TextAlignment = asian || banner ? TextAlignment.Center : TextAlignment.Left,
             TextTrimming = TextTrimming.None,
             Width = wrap ? Math.Max(4, boxW) : double.NaN,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = asian || banner ? HorizontalAlignment.Center : HorizontalAlignment.Left,
             IsHitTestVisible = false
         };
+
+        if (!OverlayFont.ShrinkToFitWidth(item.Origin))
+            return label;
 
         return new Viewbox
         {

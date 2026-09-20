@@ -85,6 +85,7 @@ public sealed class OcrLine
     public required ScreenRect Bounds { get; init; }
     public TextQuad Quad { get; init; }
     public float Confidence { get; init; }
+    public OcrBoxOrigin Origin { get; init; } = OcrBoxOrigin.Rapid;
     public TextQuad Shape => Quad.IsValid ? Quad : TextQuad.FromRect(Bounds);
 }
 
@@ -108,6 +109,7 @@ public sealed record OverlayItem
     public TextAppearance Appearance { get; init; } = TextAppearance.Fallback(ScreenRect.Empty);
     public OverlayItemKind Kind { get; init; } = OverlayItemKind.Probe;
     public bool Highlighted { get; init; }
+    public OcrBoxOrigin Origin { get; init; } = OcrBoxOrigin.Rapid;
     public TextQuad Shape => Quad.IsValid ? Quad : TextQuad.FromRect(ScreenBounds);
 }
 

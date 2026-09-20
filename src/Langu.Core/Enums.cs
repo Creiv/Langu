@@ -26,3 +26,9 @@ public enum OverlayItemKind
     Busy,
     Translated
 }
+
+public enum OcrBoxOrigin
+{
+    Rapid,
+    Windows
+}

@@ -516,7 +516,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
             var screen = frame.MapToScreen(line.Bounds);
             var quad = frame.MapToScreen(line.Shape);
             var guess = _detector.DetectWithHint(line.Text, _settings.SourceLanguage);
-            incoming.Add(new OverlayItem
+                incoming.Add(new OverlayItem
             {
                 Id = MakeId(line.Text, screen),
                 SourceText = line.Text,
@@ -524,7 +524,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 ScreenBounds = screen,
                 Quad = quad.IsValid && quad.Bounds.Height <= screen.Height + 3 ? quad : TextQuad.FromRect(screen),
                 Appearance = TextAppearance.FromFrame(frame, line.Bounds, line.Text),
-                Kind = OverlayItemKind.Probe
+                Kind = OverlayItemKind.Probe,
+                Origin = line.Origin
             });
         }
 
@@ -609,9 +610,17 @@ public sealed class TranslationPipeline : IAsyncDisposable
             if (match is not null)
             {
                 available.Remove(match);
+                var followed = BoxFollow.Follow(pin.ScreenBounds, match.ScreenBounds, snap);
+                var bounds = pin.Origin == OcrBoxOrigin.Windows
+                    ? OverlayFont.GrowBox(
+                        new ScreenRect(followed.X, followed.Y, match.ScreenBounds.Width, match.ScreenBounds.Height),
+                        pin.TranslatedText,
+                        pin.SourceText,
+                        pin.Origin)
+                    : followed;
                 _pins[i] = pin with
                 {
-                    ScreenBounds = BoxFollow.Follow(pin.ScreenBounds, match.ScreenBounds, snap),
+                    ScreenBounds = bounds,
                     Quad = snap || pin.ScreenBounds.IoU(match.ScreenBounds) < 0.2
                         ? match.Quad
                         : pin.Quad
@@ -982,12 +991,14 @@ public sealed class TranslationPipeline : IAsyncDisposable
         lock (_stateLock)
         {
             var live = BestMatch(target, _lastOcr);
+            var bounds = live is not null ? live.ScreenBounds : target.ScreenBounds;
+            bounds = OverlayFont.GrowBox(bounds, translated, target.SourceText, target.Origin);
             var pinned = target with
             {
                 TranslatedText = translated,
                 SourceLanguage = language,
                 Kind = OverlayItemKind.Translated,
-                ScreenBounds = live is not null ? live.ScreenBounds : target.ScreenBounds,
+                ScreenBounds = bounds,
                 Quad = live is { Quad.IsValid: true } ? live.Quad : target.Quad
             };
             _probes.RemoveAll(p => p.Id == target.Id || p.ScreenBounds.IoU(target.ScreenBounds) > 0.4);

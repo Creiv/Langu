@@ -70,7 +70,8 @@ public sealed class WindowsOcrEngine : IOcrEngine
                     Text = text,
                     Bounds = union,
                     Quad = quad,
-                    Confidence = 0.75f
+                    Confidence = 0.75f,
+                    Origin = OcrBoxOrigin.Windows
                 });
             }
         }

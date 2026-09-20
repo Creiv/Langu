@@ -100,7 +100,10 @@ public static class OcrBlockGrouper
             ScreenBounds = bounds,
             Quad = TextQuad.FromRect(bounds),
             Appearance = look,
-            Kind = OverlayItemKind.Probe
+            Kind = OverlayItemKind.Probe,
+            Origin = ordered.All(i => i.Origin == OcrBoxOrigin.Windows)
+                ? OcrBoxOrigin.Windows
+                : OcrBoxOrigin.Rapid
         };
     }
 

@@ -188,7 +188,8 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
                 Text = text,
                 Bounds = bounds,
                 Quad = quad,
-                Confidence = confidence
+                Confidence = confidence,
+                Origin = OcrBoxOrigin.Rapid
             });
         }
 

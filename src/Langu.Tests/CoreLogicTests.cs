@@ -118,7 +118,7 @@ public class CoreLogicTests
     public void Router_keeps_windows_menu_when_rapid_is_one_tall_box()
     {
         var windows = Enumerable.Range(0, 8)
-            .Select(i => Line($"Voce{i}xx", new ScreenRect(400, 80 + i * 40, 180, 26)))
+            .Select(i => Line($"Voce{i}xx", new ScreenRect(400, 80 + i * 40, 180, 26), OcrBoxOrigin.Windows))
             .ToList();
         var rapid = new[]
         {
@@ -128,29 +128,33 @@ public class CoreLogicTests
         var merged = OcrAutoRouter.Merge(windows, rapid);
         Assert.Equal(8, merged.Count);
         Assert.All(merged, line => Assert.True(line.Bounds.Height <= 28));
+        Assert.All(merged, line => Assert.Equal(OcrBoxOrigin.Windows, line.Origin));
         Assert.Contains(merged, line => line.Text == "Voce0xx");
     }
 
     [Fact]
     public void Router_adds_cjk_in_empty_gap()
     {
-        var windows = new[] { Line("Hello", new ScreenRect(40, 40, 80, 20)) };
+        var windows = new[] { Line("Hello", new ScreenRect(40, 40, 80, 20), OcrBoxOrigin.Windows) };
         var rapid = new[] { Line("日本語です", new ScreenRect(40, 200, 140, 24)) };
         var merged = OcrAutoRouter.Merge(windows, rapid);
         Assert.Equal(2, merged.Count);
         Assert.Contains(merged, line => line.Text == "日本語です");
         Assert.Equal(24, merged.Single(line => line.Text == "日本語です").Bounds.Height);
+        Assert.Equal(OcrBoxOrigin.Windows, merged.Single(line => line.Text == "Hello").Origin);
+        Assert.Equal(OcrBoxOrigin.Rapid, merged.Single(line => line.Text == "日本語です").Origin);
     }
 
     [Fact]
     public void Router_keeps_windows_height_when_adopting_cjk_text()
     {
-        var windows = new[] { Line("abcde", new ScreenRect(80, 100, 160, 28)) };
+        var windows = new[] { Line("abcde", new ScreenRect(80, 100, 160, 28), OcrBoxOrigin.Windows) };
         var rapid = new[] { Line("ストーリー", new ScreenRect(70, 90, 220, 90)) };
         var merged = OcrAutoRouter.Merge(windows, rapid);
         Assert.Single(merged);
         Assert.Equal("ストーリー", merged[0].Text);
         Assert.Equal(28, merged[0].Bounds.Height);
+        Assert.Equal(OcrBoxOrigin.Windows, merged[0].Origin);
     }
 
     [Fact]
@@ -309,23 +313,68 @@ public class CoreLogicTests
         Assert.Equal("en", detector.DetectWithHint("Settings menu", "ja").Iso639);
     }
 
-    private static OcrLine Line(string text, ScreenRect bounds) => new()
+    [Fact]
+    public void OverlayFont_windows_stays_larger_and_does_not_shrink_to_width()
+    {
+        Assert.True(OverlayFont.LineSize(20, OcrBoxOrigin.Windows, "HELLO") > OverlayFont.LineSize(20, OcrBoxOrigin.Rapid));
+        Assert.False(OverlayFont.ShrinkToFitWidth(OcrBoxOrigin.Windows));
+        Assert.True(OverlayFont.ShrinkToFitWidth(OcrBoxOrigin.Rapid));
+    }
+
+    [Fact]
+    public void OverlayFont_windows_uses_smaller_em_when_source_already_has_descenders()
+    {
+        var caps = OverlayFont.LineSize(22, OcrBoxOrigin.Windows, "HELLO");
+        var low = OverlayFont.LineSize(22, OcrBoxOrigin.Windows, "payload");
+        var cjk = OverlayFont.LineSize(22, OcrBoxOrigin.Windows, "日本語");
+        Assert.True(caps > low);
+        Assert.True(caps > cjk);
+        Assert.True(OverlayFont.IncludesBelowInk("gatto"));
+        Assert.False(OverlayFont.IncludesBelowInk("THE"));
+    }
+
+    [Fact]
+    public void OverlayFont_grows_windows_box_for_long_translation()
+    {
+        var box = new ScreenRect(100, 40, 80, 20);
+        var grown = OverlayFont.GrowBox(box, "This is a much longer Italian line", "OK", OcrBoxOrigin.Windows);
+        Assert.True(grown.Width > box.Width);
+        Assert.Equal(box.Height, grown.Height);
+        Assert.Equal(box.X, grown.X);
+        Assert.Equal(box, OverlayFont.GrowBox(box, "This is a much longer Italian line", "OK", OcrBoxOrigin.Rapid));
+        Assert.Equal(box, OverlayFont.GrowBox(box, "OK", "OK", OcrBoxOrigin.Windows));
+    }
+
+    [Fact]
+    public void Grouper_keeps_windows_origin_on_joined_words()
+    {
+        var grouped = OcrBlockGrouper.Merge([
+            Item("The", new ScreenRect(40, 80, 40, 22), OcrBoxOrigin.Windows),
+            Item("way", new ScreenRect(86, 80, 40, 22), OcrBoxOrigin.Windows)
+        ]);
+        Assert.Single(grouped);
+        Assert.Equal(OcrBoxOrigin.Windows, grouped[0].Origin);
+    }
+
+    private static OcrLine Line(string text, ScreenRect bounds, OcrBoxOrigin origin = OcrBoxOrigin.Rapid) => new()
     {
         Text = text,
         Bounds = bounds,
-        Confidence = 0.8f
+        Confidence = 0.8f,
+        Origin = origin
     };
 
     private static ScreenRect Centered(int centerX, int y, int width, int height) =>
         new(centerX - width / 2, y, width, height);
 
-    private static OverlayItem Item(string text, ScreenRect bounds) => new()
+    private static OverlayItem Item(string text, ScreenRect bounds, OcrBoxOrigin origin = OcrBoxOrigin.Rapid) => new()
     {
         Id = text,
         SourceText = text,
         SourceLanguage = "ja",
         ScreenBounds = bounds,
-        Appearance = Look()
+        Appearance = Look(),
+        Origin = origin
     };
 
     private static TextAppearance Look() => new()

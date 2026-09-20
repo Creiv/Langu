@@ -4,9 +4,9 @@ Offline on-screen translator for Windows. Hold a key, read text on screen (Latin
 
 ## Download
 
-Ready-to-run release: [Langu 1.1.0](https://github.com/Creiv/Langu/releases/tag/v1.1.0)
+Ready-to-run release: [Langu 1.2.0](https://github.com/Creiv/Langu/releases/tag/v1.2.0)
 
-1. Download [Langu-1.1.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.1.0/Langu-1.1.0-win-x64.zip)
+1. Download [Langu-1.2.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.2.0/Langu-1.2.0-win-x64.zip)
 2. Extract the zip and start `Langu.exe`
 3. In Langu, click **Start**. For offline translation, click **Download models** once
 

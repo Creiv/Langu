@@ -48,7 +48,7 @@ public static class OcrModelInstaller
         AppPaths.EnsureCreated();
         Directory.CreateDirectory(AppPaths.OcrModelDir);
         using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.1");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.2");
 
         foreach (var file in Files)
         {
