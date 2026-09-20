@@ -10,7 +10,17 @@ Autore: [Creiv](https://github.com/Creiv)
 - .NET 8 SDK per compilare
 - Per la traduzione offline: modelli NLLB (pulsante **Scarica modelli** nell’app)
 
-## Avvio
+## Download
+
+Release pronta: [Langu 1.0.0](https://github.com/Creiv/Langu/releases/tag/v1.0.0)
+
+1. Scarica [Langu-1.0.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.0.0/Langu-1.0.0-win-x64.zip)
+2. Estrai e avvia `Langu.exe`
+3. In Langu: **Avvia**. Per tradurre offline usa **Scarica modelli**
+
+Non serve installare .NET.
+
+## Compilare
 
 1. Compila in Release, oppure pubblica un eseguibile autonomo:
 
