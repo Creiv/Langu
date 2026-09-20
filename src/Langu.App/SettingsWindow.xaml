@@ -112,12 +112,12 @@
                         <ComboBox x:Name="SourceLanguageBox" SelectionChanged="OnSettingsChanged"/>
                         <TextBlock Style="{StaticResource FieldLabel}" Text="Engine"/>
                         <ComboBox x:Name="OcrBox" SelectionChanged="OnOcrChanged">
-                            <ComboBoxItem Content="Auto — Windows first, Rapid only if needed"/>
+                            <ComboBoxItem Content="Auto — Windows layout, Rapid finds Japanese/CJK"/>
                             <ComboBoxItem Content="Windows — Latin, fast and accurate"/>
                             <ComboBoxItem Content="RapidOCR — Asian scripts, slower"/>
                         </ComboBox>
                         <TextBlock x:Name="OcrHintText" Style="{StaticResource FieldLabel}" Margin="0,0,0,10"
-                                   Text="Windows reads normal text. Rapid only fills gaps for Japanese, Chinese, and Korean."/>
+                                   Text="Windows reads Latin. Rapid also looks for Japanese, Chinese, and Korean."/>
                         <TextBlock x:Name="FpsLabel" Style="{StaticResource FieldLabel}" Text="Hold-key responsiveness"/>
                         <Slider x:Name="FpsSlider" Minimum="1" Maximum="6" Value="3" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnFpsChanged"/>
                         <CheckBox x:Name="OverlayCheck" Content="Show boxes and translations" IsChecked="True" Click="OnSettingsChanged"/>

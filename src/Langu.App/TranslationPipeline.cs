@@ -406,7 +406,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 }
 
                 var searchAsian = true;
-                var forceRapid = _settings.OcrEngine == OcrEngineKind.RapidOcr;
+                var forceRapid = _settings.OcrEngine == OcrEngineKind.RapidOcr
+                                 || focused && _settings.OcrEngine != OcrEngineKind.Windows;
                 var scannedFocus = focused;
                 await ScanFrameAsync(
                     ocrFrame,
@@ -516,13 +517,15 @@ public sealed class TranslationPipeline : IAsyncDisposable
             var screen = frame.MapToScreen(line.Bounds);
             var quad = frame.MapToScreen(line.Shape);
             var guess = _detector.DetectWithHint(line.Text, _settings.SourceLanguage);
-                incoming.Add(new OverlayItem
+            incoming.Add(new OverlayItem
             {
                 Id = MakeId(line.Text, screen),
                 SourceText = line.Text,
                 SourceLanguage = guess.Iso639,
                 ScreenBounds = screen,
-                Quad = quad.IsValid && quad.Bounds.Height <= screen.Height + 3 ? quad : TextQuad.FromRect(screen),
+                Quad = TextQuad.FlattenLevel(
+                    quad.IsValid && quad.Bounds.Height <= screen.Height + 3 ? quad : TextQuad.FromRect(screen),
+                    screen),
                 Appearance = TextAppearance.FromFrame(frame, line.Bounds, line.Text),
                 Kind = OverlayItemKind.Probe,
                 Origin = line.Origin

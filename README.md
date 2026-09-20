@@ -4,9 +4,9 @@ Offline on-screen translator for Windows. Hold a key, read text on screen (Latin
 
 ## Download
 
-Ready-to-run release: [Langu 1.2.0](https://github.com/Creiv/Langu/releases/tag/v1.2.0)
+Ready-to-run release: [Langu 1.3.0](https://github.com/Creiv/Langu/releases/tag/v1.3.0)
 
-1. Download [Langu-1.2.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.2.0/Langu-1.2.0-win-x64.zip)
+1. Download [Langu-1.3.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.3.0/Langu-1.3.0-win-x64.zip)
 2. Extract the zip and start `Langu.exe`
 3. In Langu, click **Start**. For offline translation, click **Download models** once
 
@@ -37,7 +37,7 @@ You do not need to install .NET.
 - **What to read** — whole **Monitor**, a **Window**, or a fixed **Region**
 - **On-screen language** — auto-detect, or force Japanese / Chinese / Korean / others
 - **Engine**
-  - **Auto** — Windows OCR for layout; Rapid only fills gaps (CJK / empty areas)
+  - **Auto** — Windows OCR for Latin layout; Rapid also looks for Japanese / Chinese / Korean
   - **Windows** — fast Latin
   - **RapidOCR** — slower, better for Japanese / Chinese / Korean
 - **Responsiveness** — how often the hold-key scan refreshes

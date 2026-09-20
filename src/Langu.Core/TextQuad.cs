@@ -76,8 +76,19 @@ public readonly record struct TextQuad
             if (!IsValid)
                 return false;
             var angle = Math.Abs(AngleDegrees);
-            return angle is >= 14 and <= 76;
+            if (angle is < 14 or > 76)
+                return false;
+            return Bounds.Width < Bounds.Height * 2.5 || angle >= 22;
         }
+    }
+
+    public static TextQuad FlattenLevel(TextQuad quad, ScreenRect bounds)
+    {
+        if (bounds.IsEmpty)
+            return quad;
+        if (!quad.IsValid || !quad.IsTilted)
+            return FromRect(bounds);
+        return quad;
     }
 
     public static TextQuad FromRect(ScreenRect rect)

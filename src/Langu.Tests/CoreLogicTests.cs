@@ -22,6 +22,30 @@ public class CoreLogicTests
     }
 
     [Fact]
+    public void Grouper_joins_japanese_around_latin_quote()
+    {
+        var grouped = OcrBlockGrouper.Merge([
+            Item("漱石の逸話、英語から", new ScreenRect(80, 200, 160, 20), OcrBoxOrigin.Rapid),
+            Item("I love you", new ScreenRect(250, 201, 70, 18), OcrBoxOrigin.Windows),
+            Item("を愛してると訳した", new ScreenRect(330, 200, 150, 20), OcrBoxOrigin.Rapid)
+        ]);
+        Assert.Single(grouped);
+        Assert.Contains("漱石", grouped[0].SourceText, StringComparison.Ordinal);
+        Assert.Contains("I love you", grouped[0].SourceText, StringComparison.Ordinal);
+        Assert.Contains("愛してる", grouped[0].SourceText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dedup_does_not_let_latin_eat_japanese_start()
+    {
+        var merged = OcrBoxDedup.Merge([
+            Item("Stonewall story intro", new ScreenRect(80, 196, 220, 24), OcrBoxOrigin.Windows),
+            Item("漱石の逸話、英語から日本語へ", new ScreenRect(80, 200, 280, 20), OcrBoxOrigin.Rapid)
+        ]);
+        Assert.Contains(merged, i => i.SourceText.Contains("漱石", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Words_join_into_one_line()
     {
         var grouped = OcrBlockGrouper.Merge([
@@ -158,13 +182,38 @@ public class CoreLogicTests
     }
 
     [Fact]
-    public void Router_skips_rapid_on_dense_latin()
+    public void Router_keeps_rapid_bounds_for_mixed_japanese_line()
+    {
+        var windows = new[] { Line("I love you", new ScreenRect(220, 202, 70, 16), OcrBoxOrigin.Windows) };
+        var rapid = new[] { Line("漱石の逸話、英語から「I love you」を訳した", new ScreenRect(80, 198, 320, 22)) };
+        var merged = OcrAutoRouter.Merge(windows, rapid);
+        Assert.Single(merged);
+        Assert.Contains("漱石", merged[0].Text, StringComparison.Ordinal);
+        Assert.True(merged[0].Bounds.Width >= 300);
+        Assert.False(merged[0].Shape.IsTilted);
+    }
+
+    [Fact]
+    public void Router_still_runs_rapid_to_find_cjk_islands()
     {
         var windows = Enumerable.Range(0, 8)
             .Select(i => Line($"Title{i}", new ScreenRect(20, i * 30, 120, 18)))
             .ToList();
-        Assert.False(OcrAutoRouter.NeedsRapid(windows, null, true));
+        Assert.True(OcrAutoRouter.NeedsRapid(windows, null, true));
+        Assert.False(OcrAutoRouter.NeedsRapid(windows, null, false));
         Assert.True(OcrAutoRouter.NeedsRapid([], null, true));
+    }
+
+    [Fact]
+    public void Router_replaces_latin_fragments_with_japanese_line()
+    {
+        var windows = Enumerable.Range(0, 6)
+            .Select(i => Line($"junk{i}xx", new ScreenRect(80 + i * 40, 200, 36, 18), OcrBoxOrigin.Windows))
+            .ToList();
+        var rapid = new[] { Line("日本語の本文です", new ScreenRect(80, 198, 240, 22)) };
+        var merged = OcrAutoRouter.Merge(windows, rapid);
+        Assert.Contains(merged, line => line.Text == "日本語の本文です");
+        Assert.DoesNotContain(merged, line => line.Text.StartsWith("junk", StringComparison.Ordinal));
     }
 
     [Fact]

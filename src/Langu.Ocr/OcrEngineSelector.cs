@@ -51,7 +51,11 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
             : [];
         if (!_rapid.IsAvailable || !OcrAutoRouter.NeedsRapid(windows, languageHint, searchAsian))
             return windows;
-        var rapid = await _rapid.RecognizeAsync(frame, languageHint, cancellationToken, light: windows.Count >= 3);
+        var rapid = await _rapid.RecognizeAsync(
+            frame,
+            languageHint,
+            cancellationToken,
+            light: UseLightRapid(windows, force: false));
         return OcrAutoRouter.Merge(windows, rapid);
     }
 
@@ -96,9 +100,18 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
         }
 
         onPartial([], "rapid-start");
-        var rapid = await _rapid.RecognizeAsync(frame, languageHint, cancellationToken, light: windows.Count >= 3);
+        var rapid = await _rapid.RecognizeAsync(
+            frame,
+            languageHint,
+            cancellationToken,
+            light: UseLightRapid(windows, forceRapid));
         onPartial(OcrAutoRouter.Merge(windows, rapid), "rapid");
     }
+
+    private static bool UseLightRapid(IReadOnlyList<OcrLine> windows, bool force) =>
+        !force
+        && windows.Count >= 3
+        && windows.Any(line => LanguageDetector.HasReliableCjk(line.Text));
 
     private string SelectedLabel => _kind switch
     {

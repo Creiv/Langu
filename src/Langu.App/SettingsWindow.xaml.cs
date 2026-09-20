@@ -169,7 +169,7 @@ public partial class SettingsWindow : Window
         {
             1 => "Best for YouTube, browsers, and normal Latin text. Weak on stylized kanji and hiragana.",
             2 => "Slower, but reads Japanese, Chinese, and Korean. Set the on-screen language if you can.",
-            _ => "Windows reads normal text. Rapid only fills gaps for Japanese, Chinese, and Korean."
+            _ => "Windows reads Latin. Rapid also looks for Japanese, Chinese, and Korean."
         };
     }
 

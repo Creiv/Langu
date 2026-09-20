@@ -63,7 +63,9 @@ public static class OcrBlockGrouper
         var h = Math.Max(1, (a.Height + b.Height) / 2.0);
         if (a.Height / (double)Math.Max(1, b.Height) is < 0.62 or > 1.6)
             return false;
-        if (bestGap > h * 0.7)
+        var mixed = LanguageDetector.HasCjk(best.SourceText) || LanguageDetector.HasCjk(extra.SourceText);
+        var maxGap = mixed ? Math.Max(h * 2.8, 72) : h * 0.7;
+        if (bestGap > maxGap)
             return false;
         if (OcrReadingLayout.LooksLikeMenuLabel(best.SourceText)
             && OcrReadingLayout.LooksLikeMenuLabel(extra.SourceText))
@@ -89,8 +91,7 @@ public static class OcrBlockGrouper
     {
         var ordered = cluster.OrderBy(i => i.ScreenBounds.X).ToList();
         var bounds = LineBounds(ordered);
-        var cjk = ordered.Count(i => LanguageDetector.HasCjk(i.SourceText)) >= (ordered.Count + 1) / 2;
-        var text = string.Join(cjk ? "" : " ", ordered.Select(i => i.SourceText.Trim()).Where(t => t.Length > 0));
+        var text = JoinClusterText(ordered);
         var look = TextAppearance.Blend(ordered.Select(i => i.Appearance).ToList());
         return new OverlayItem
         {
@@ -105,6 +106,21 @@ public static class OcrBlockGrouper
                 ? OcrBoxOrigin.Windows
                 : OcrBoxOrigin.Rapid
         };
+    }
+
+    private static string JoinClusterText(List<OverlayItem> ordered)
+    {
+        var parts = ordered.Select(i => i.SourceText.Trim()).Where(t => t.Length > 0).ToList();
+        if (parts.Count == 0)
+            return "";
+        var text = parts[0];
+        for (var i = 1; i < parts.Count; i++)
+        {
+            var glue = LanguageDetector.HasCjk(parts[i - 1]) && LanguageDetector.HasCjk(parts[i]) ? "" : " ";
+            text += glue + parts[i];
+        }
+
+        return text;
     }
 
     private static ScreenRect LineBounds(List<OverlayItem> ordered)

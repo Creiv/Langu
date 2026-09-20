@@ -32,6 +32,12 @@ public static class OcrBoxDedup
 
     private static bool SamePlace(OverlayItem a, OverlayItem b)
     {
+        var mixed = LanguageDetector.HasCjk(a.SourceText) != LanguageDetector.HasCjk(b.SourceText);
+        if (mixed && !RowAligned(a.ScreenBounds, b.ScreenBounds))
+            return false;
+        if (mixed && a.ScreenBounds.IoU(b.ScreenBounds) < 0.62 && !ContainsMostly(a.ScreenBounds, b.ScreenBounds)
+            && !ContainsMostly(b.ScreenBounds, a.ScreenBounds))
+            return false;
         if (a.ScreenBounds.IoU(b.ScreenBounds) >= 0.28)
             return true;
         if (a.ScreenBounds.Overlaps(b.ScreenBounds, 0.55))
@@ -66,12 +72,43 @@ public static class OcrBoxDedup
                        && LanguageDetector.IsUsefulOcr(extra.SourceText)
             ? extra
             : current;
-        var box = Tighter(current.ScreenBounds, extra.ScreenBounds);
+        if (LanguageDetector.HasReliableCjk(extra.SourceText) && !LanguageDetector.HasReliableCjk(current.SourceText))
+            keepText = extra;
+        else if (LanguageDetector.HasReliableCjk(current.SourceText) && !LanguageDetector.HasReliableCjk(extra.SourceText))
+            keepText = current;
+
+        var box = LanguageDetector.HasCjk(keepText.SourceText)
+                  && RowAligned(current.ScreenBounds, extra.ScreenBounds)
+            ? WiderLine(current.ScreenBounds, extra.ScreenBounds, keepText.ScreenBounds)
+            : LanguageDetector.HasCjk(keepText.SourceText)
+                ? keepText.ScreenBounds
+                : Tighter(current.ScreenBounds, extra.ScreenBounds);
         return keepText with
         {
             ScreenBounds = box,
-            Quad = keepText.Shape.IsTilted ? keepText.Quad : TextQuad.FromRect(box)
+            Quad = TextQuad.FlattenLevel(keepText.Quad, box)
         };
+    }
+
+    private static ScreenRect WiderLine(ScreenRect a, ScreenRect b, ScreenRect fallback)
+    {
+        if (a.IsEmpty)
+            return b;
+        if (b.IsEmpty)
+            return a;
+        var left = Math.Min(a.X, b.X);
+        var right = Math.Max(a.X + a.Width, b.X + b.Width);
+        var height = Math.Min(a.Height, b.Height);
+        var centerY = (a.CenterY + b.CenterY) / 2;
+        if (height < 8)
+            return fallback;
+        return new ScreenRect(left, centerY - height / 2, Math.Max(1, right - left), height);
+    }
+
+    private static bool RowAligned(ScreenRect a, ScreenRect b)
+    {
+        var minH = Math.Max(1, Math.Min(a.Height, b.Height));
+        return Math.Abs(a.CenterY - b.CenterY) <= Math.Max(6, minH * 0.55);
     }
 
     private static ScreenRect Tighter(ScreenRect a, ScreenRect b)

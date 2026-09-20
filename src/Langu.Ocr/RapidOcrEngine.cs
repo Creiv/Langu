@@ -183,6 +183,7 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
             if (LanguageDetector.LooksLikeGarbage(text))
                 continue;
 
+            quad = TextQuad.FlattenLevel(quad, bounds);
             lines.Add(new OcrLine
             {
                 Text = text,
@@ -246,8 +247,9 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
             {
                 Text = PreferText(line.Text, best.Text),
                 Bounds = keepBounds,
-                Quad = line.Shape.IsValid ? line.Shape : TextQuad.FromRect(keepBounds),
-                Confidence = Math.Max(line.Confidence, best.Confidence)
+                Quad = TextQuad.FlattenLevel(line.Shape.IsValid ? line.Shape : TextQuad.FromRect(keepBounds), keepBounds),
+                Confidence = Math.Max(line.Confidence, best.Confidence),
+                Origin = OcrBoxOrigin.Rapid
             });
 
             foreach (var extra in found.Skip(1))
@@ -260,7 +262,8 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
                         crop.SourceBox.Y + (int)Math.Round(extra.Bounds.Y / crop.Scale),
                         Math.Max(1, (int)Math.Round(extra.Bounds.Width / crop.Scale)),
                         Math.Max(1, (int)Math.Round(extra.Bounds.Height / crop.Scale))),
-                    Confidence = extra.Confidence
+                    Confidence = extra.Confidence,
+                    Origin = OcrBoxOrigin.Rapid
                 });
             }
         }
@@ -293,6 +296,9 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         if (string.IsNullOrWhiteSpace(text))
             return true;
         if (!LanguageDetector.HasCjk(text))
+            return false;
+        var kana = CountKana(text);
+        if (kana >= 4)
             return false;
         var latin = text.Count(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or '+' or '=' or '*');
         return latin > 0;
@@ -371,7 +377,8 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
                 Text = line.Text,
                 Bounds = quad.IsValid ? quad.Bounds : line.Bounds.Offset(sourceBox.X, sourceBox.Y),
                 Quad = quad,
-                Confidence = line.Confidence
+                Confidence = line.Confidence,
+                Origin = OcrBoxOrigin.Rapid
             });
         }
 
@@ -383,12 +390,14 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         var mapped = new List<OcrLine>(lines.Count);
         foreach (var line in lines)
         {
+            var bounds = line.Bounds.Offset(sourceBox.X, sourceBox.Y);
             mapped.Add(new OcrLine
             {
                 Text = line.Text,
-                Bounds = line.Bounds.Offset(sourceBox.X, sourceBox.Y),
-                Quad = line.Shape.Offset(sourceBox.X, sourceBox.Y),
-                Confidence = line.Confidence
+                Bounds = bounds,
+                Quad = TextQuad.FlattenLevel(line.Shape.Offset(sourceBox.X, sourceBox.Y), bounds),
+                Confidence = line.Confidence,
+                Origin = OcrBoxOrigin.Rapid
             });
         }
 
@@ -409,12 +418,14 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
             using var bitmap = crop.Bitmap;
             foreach (var line in ReadAll(engines, bitmap, crop.Scale))
             {
+                var tileBounds = line.Bounds.Offset(crop.SourceBox.X, crop.SourceBox.Y);
                 merged.Add(new OcrLine
                 {
                     Text = line.Text,
-                    Bounds = line.Bounds.Offset(crop.SourceBox.X, crop.SourceBox.Y),
-                    Quad = line.Shape.Offset(crop.SourceBox.X, crop.SourceBox.Y),
-                    Confidence = line.Confidence
+                    Bounds = tileBounds,
+                    Quad = TextQuad.FlattenLevel(line.Shape.Offset(crop.SourceBox.X, crop.SourceBox.Y), tileBounds),
+                    Confidence = line.Confidence,
+                    Origin = OcrBoxOrigin.Rapid
                 });
             }
         }

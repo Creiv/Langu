@@ -4,16 +4,9 @@ public static class OcrAutoRouter
 {
     public static bool NeedsRapid(IReadOnlyList<OcrLine> windows, string? languageHint, bool searchAsian)
     {
-        var useful = windows.Where(Useful).ToList();
-        if (useful.Count == 0)
+        if (LanguageDetector.IsCjkHint(languageHint) || searchAsian)
             return true;
-        if (LanguageDetector.IsCjkHint(languageHint))
-            return true;
-        if (useful.Any(line => LanguageDetector.HasReliableCjk(line.Text)))
-            return useful.Count < 10;
-        if (useful.Count >= 6 && useful.All(line => LanguageDetector.IsMostlyLatin(line.Text)))
-            return false;
-        return searchAsian || useful.Count < 4;
+        return !windows.Any(Useful);
     }
 
     public static IReadOnlyList<OcrLine> Merge(IReadOnlyList<OcrLine> windows, IReadOnlyList<OcrLine> rapid)
@@ -32,20 +25,22 @@ public static class OcrAutoRouter
             }
 
             if (hits.Count >= 2)
+            {
+                if (ShouldReplaceLatinCluster(hits, extra))
+                {
+                    foreach (var hit in hits)
+                        layout.Remove(hit);
+                    layout.Add(KeepTight(extra));
+                }
+
                 continue;
+            }
 
             var current = hits[0];
             if (!ShouldAdoptText(current, extra))
                 continue;
             var index = layout.IndexOf(current);
-            layout[index] = new OcrLine
-            {
-                Text = extra.Text.Trim(),
-                Bounds = current.Bounds,
-                Quad = current.Quad,
-                Confidence = Math.Max(current.Confidence, extra.Confidence),
-                Origin = current.Origin
-            };
+            layout[index] = Adopt(current, extra);
         }
 
         return layout;
@@ -63,6 +58,19 @@ public static class OcrAutoRouter
     private static bool ContainsMostly(ScreenRect outer, ScreenRect inner) =>
         !inner.IsEmpty && outer.Intersect(inner).Area >= inner.Area * 0.8;
 
+    private static bool ShouldReplaceLatinCluster(List<OcrLine> hits, OcrLine extra)
+    {
+        if (!LanguageDetector.HasReliableCjk(extra.Text))
+            return false;
+        if (hits.Any(hit => LanguageDetector.HasReliableCjk(hit.Text)))
+            return false;
+        var medianH = hits.Select(hit => hit.Bounds.Height).OrderBy(h => h).ElementAt(hits.Count / 2);
+        if (extra.Bounds.Height > Math.Max(36, medianH * 2.4))
+            return false;
+        return hits.All(hit =>
+            LanguageDetector.IsMostlyLatin(hit.Text) || LanguageDetector.LooksLikeGarbage(hit.Text));
+    }
+
     private static bool ShouldAdoptText(OcrLine current, OcrLine extra)
     {
         if (LanguageDetector.HasReliableCjk(extra.Text) && !LanguageDetector.HasReliableCjk(current.Text))
@@ -70,21 +78,35 @@ public static class OcrAutoRouter
         return LanguageDetector.LooksLikeGarbage(current.Text) && LanguageDetector.IsUsefulOcr(extra.Text);
     }
 
+    private static OcrLine Adopt(OcrLine current, OcrLine extra)
+    {
+        var takeRapidBox = LanguageDetector.HasReliableCjk(extra.Text)
+                           && extra.Bounds.Width >= current.Bounds.Width
+                           && extra.Bounds.Height <= Math.Max(current.Bounds.Height * 2.2, 36);
+        var source = takeRapidBox ? KeepTight(extra) : current;
+        return new OcrLine
+        {
+            Text = extra.Text.Trim(),
+            Bounds = source.Bounds,
+            Quad = TextQuad.FlattenLevel(source.Quad, source.Bounds),
+            Confidence = Math.Max(current.Confidence, extra.Confidence),
+            Origin = takeRapidBox ? extra.Origin : current.Origin
+        };
+    }
+
     private static OcrLine KeepTight(OcrLine line)
     {
         var bounds = line.Bounds;
-        if (line.Quad.IsValid && line.Quad.Bounds.Height > bounds.Height + 2)
+        var quad = TextQuad.FlattenLevel(line.Quad, bounds);
+        if (quad.IsValid && quad.Bounds.Height > bounds.Height + 2)
+            quad = TextQuad.FromRect(bounds);
+        return new OcrLine
         {
-            return new OcrLine
-            {
-                Text = line.Text,
-                Bounds = bounds,
-                Quad = TextQuad.FromRect(bounds),
-                Confidence = line.Confidence,
-                Origin = line.Origin
-            };
-        }
-
-        return line;
+            Text = line.Text,
+            Bounds = bounds,
+            Quad = quad,
+            Confidence = line.Confidence,
+            Origin = line.Origin
+        };
     }
 }

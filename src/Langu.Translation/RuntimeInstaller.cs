@@ -36,7 +36,7 @@ public sealed class RuntimeInstaller
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromHours(2) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.2");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.3");
         return client;
     }
 
