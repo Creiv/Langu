@@ -1,0 +1,42 @@
+<Window x:Class="Langu.Overlay.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Langu Overlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Focusable="False"
+        ShowActivated="False"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True">
+    <Grid IsHitTestVisible="False">
+        <Canvas x:Name="ChromeCanvas" IsHitTestVisible="False">
+            <Rectangle x:Name="FocusBand"
+                       Visibility="Collapsed"
+                       StrokeThickness="2"
+                       RadiusX="3"
+                       RadiusY="3"
+                       IsHitTestVisible="False"/>
+        </Canvas>
+        <Canvas x:Name="RootCanvas" IsHitTestVisible="False"/>
+        <Border x:Name="HudRoot"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,18,0,0"
+                Padding="16,9"
+                CornerRadius="18"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" ShadowDepth="0" Opacity="0.55" Color="Black"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <Ellipse x:Name="HudDot" Width="10" Height="10" Margin="0,0,9,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="HudText" FontWeight="SemiBold" FontSize="14" Foreground="White"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

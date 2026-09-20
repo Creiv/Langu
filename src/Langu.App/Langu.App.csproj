@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Langu.App</RootNamespace>
+    <AssemblyName>Langu</AssemblyName>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\langu.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\Langu.Translation\Runtime\translator_worker.py" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="Assets\langu.ico" />
+    <Resource Include="Assets\langu.png" />
+  </ItemGroup>
+  <Target Name="CopyOcrModels" AfterTargets="Build">
+    <ItemGroup>
+      <OcrModels Include="..\Langu.Ocr\bin\**\models\v5\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OcrModels)" DestinationFolder="$(TargetDir)models\v5\" SkipUnchangedFiles="true" Condition="'@(OcrModels)' != ''" />
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Langu.Core\Langu.Core.csproj" />
+    <ProjectReference Include="..\Langu.Capture\Langu.Capture.csproj" />
+    <ProjectReference Include="..\Langu.Ocr\Langu.Ocr.csproj" />
+    <ProjectReference Include="..\Langu.Translation\Langu.Translation.csproj" />
+    <ProjectReference Include="..\Langu.Overlay\Langu.Overlay.csproj" />
+  </ItemGroup>
+</Project>

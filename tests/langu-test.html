@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <title>Langu — pagina di test</title>
+  <style>
+    body { font-family: Segoe UI, "Yu Gothic UI", "Microsoft YaHei UI", sans-serif; background:#111; color:#eee; margin:24px; }
+    h1, h2 { font-weight: 600; }
+    .row { margin: 22px 0; padding: 16px; border-radius: 10px; }
+    .big { font-size: 64px; font-weight: 700; }
+    .mid { font-size: 28px; }
+    .small { font-size: 13px; }
+    .white { background:#fff; color:#111; }
+    .red { background:#c0392b; color:#fff; }
+    .yellow { background:#f1c40f; color:#1a1a1a; }
+    .cream { background:#f3e6c9; color:#5a2d12; }
+    .pixel {
+      background:#1f3a5f;
+      color:#ffeaa7;
+      font-family: "Courier New", monospace;
+      font-size: 14px;
+      image-rendering: pixelated;
+      transform: scale(2);
+      transform-origin: left top;
+      width: 50%;
+    }
+    .tilt { transform: rotate(-18deg); transform-origin: left center; display: inline-block; padding: 10px 18px; }
+    .vert {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      font-size: 36px;
+      background: #7a1f1f;
+      color: #fff3d6;
+      padding: 18px 12px;
+      letter-spacing: 6px;
+    }
+    .icons { font-size: 42px; letter-spacing: 18px; }
+    .stack { background:#f7efe2; color:#3b2414; padding: 14px 20px; display: inline-block; }
+    .stack p { margin: 0 0 6px; font-size: 22px; }
+    canvas { image-rendering: pixelated; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Pagina di test Langu</h1>
+  <p>Tieni premuto il tasto sonda, clicca le box. Controlla: latino a sinistra, CJK centrato, testo storto, verticale, icone ignorate, tutte le righe del cartello.</p>
+
+  <h2>Latino</h2>
+  <div class="row white big">Hello world</div>
+  <div class="row red mid">The quick brown fox jumps</div>
+  <div class="row yellow mid">Bonjour le monde</div>
+  <div class="row small">Small caption text over dark background</div>
+
+  <h2>Cartello a più righe</h2>
+  <div class="stack">
+    <p>営業時間 10:00-20:00</p>
+    <p>定休日 水曜日</p>
+    <p>ご来店ありがとうございます</p>
+  </div>
+
+  <h2>Verticale</h2>
+  <div class="vert">焼肉定食</div>
+
+  <h2>Storto</h2>
+  <div class="row cream tilt mid">斜めの看板テキスト</div>
+
+  <h2>Icone (non devono diventare testo)</h2>
+  <div class="row icons">▶ ★ ® ☆ ◆</div>
+
+  <h2>Pixel / immagine</h2>
+  <div class="row pixel">PIXELATED GAME TEXT</div>
+  <canvas id="c" width="160" height="32"></canvas>
+  <script>
+    const c = document.getElementById('c');
+    const g = c.getContext('2d');
+    g.fillStyle = '#6c5ce7';
+    g.fillRect(0,0,160,32);
+    g.fillStyle = '#fff';
+    g.font = '12px monospace';
+    g.fillText('COLORED PIXEL', 6, 21);
+  </script>
+</body>
+</html>

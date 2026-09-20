@@ -1,0 +1,65 @@
+namespace Langu.Core;
+
+public static class NllbLanguages
+{
+    public static readonly IReadOnlyDictionary<string, string> IsoToNllb = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["en"] = "eng_Latn",
+        ["it"] = "ita_Latn",
+        ["fr"] = "fra_Latn",
+        ["de"] = "deu_Latn",
+        ["es"] = "spa_Latn",
+        ["pt"] = "por_Latn",
+        ["nl"] = "nld_Latn",
+        ["pl"] = "pol_Latn",
+        ["ro"] = "ron_Latn",
+        ["sv"] = "swe_Latn",
+        ["da"] = "dan_Latn",
+        ["no"] = "nob_Latn",
+        ["fi"] = "fin_Latn",
+        ["cs"] = "ces_Latn",
+        ["sk"] = "slk_Latn",
+        ["hu"] = "hun_Latn",
+        ["el"] = "ell_Grek",
+        ["ru"] = "rus_Cyrl",
+        ["uk"] = "ukr_Cyrl",
+        ["bg"] = "bul_Cyrl",
+        ["sr"] = "srp_Cyrl",
+        ["zh"] = "zho_Hans",
+        ["zh-cn"] = "zho_Hans",
+        ["zh-tw"] = "zho_Hant",
+        ["ja"] = "jpn_Jpan",
+        ["ko"] = "kor_Hang",
+        ["ar"] = "arb_Arab",
+        ["he"] = "heb_Hebr",
+        ["hi"] = "hin_Deva",
+        ["th"] = "tha_Thai",
+        ["vi"] = "vie_Latn",
+        ["tr"] = "tur_Latn",
+        ["id"] = "ind_Latn",
+        ["ms"] = "zsm_Latn",
+        ["fa"] = "pes_Arab",
+        ["ur"] = "urd_Arab",
+        ["bn"] = "ben_Beng",
+        ["ta"] = "tam_Taml",
+        ["te"] = "tel_Telu",
+        ["ca"] = "cat_Latn",
+        ["eu"] = "eus_Latn",
+        ["gl"] = "glg_Latn",
+        ["hr"] = "hrv_Latn",
+        ["sl"] = "slv_Latn",
+        ["lt"] = "lit_Latn",
+        ["lv"] = "lvs_Latn",
+        ["et"] = "est_Latn",
+        ["ga"] = "gle_Latn",
+        ["cy"] = "cym_Latn",
+        ["is"] = "isl_Latn",
+        ["mk"] = "mkd_Cyrl",
+        ["sq"] = "als_Latn",
+        ["sw"] = "swh_Latn",
+        ["af"] = "afr_Latn"
+    };
+
+    public static string FromIso(string iso) =>
+        IsoToNllb.TryGetValue(iso, out var code) ? code : "eng_Latn";
+}
