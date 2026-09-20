@@ -9,24 +9,18 @@ public static class BoxFollow
         if (frozen.IsEmpty || adoptSize)
             return live;
 
-        var widthRatio = live.Width / (double)Math.Max(1, frozen.Width);
-        var heightRatio = live.Height / (double)Math.Max(1, frozen.Height);
-        if (widthRatio is >= 0.72 and <= 1.4 && heightRatio is >= 0.72 and <= 1.4)
-            return live;
-
-        if (frozen.IoU(live) < 0.2)
-        {
-            return new ScreenRect(
-                live.CenterX - frozen.Width / 2,
-                live.CenterY - frozen.Height / 2,
-                frozen.Width,
-                frozen.Height);
-        }
-
-        var dx = Math.Clamp(live.CenterX - frozen.CenterX, -Math.Max(4, frozen.Width / 5), Math.Max(4, frozen.Width / 5));
-        var dy = Math.Clamp(live.CenterY - frozen.CenterY, -Math.Max(4, frozen.Height / 5), Math.Max(4, frozen.Height / 5));
-        if (Math.Abs(dx) < 2 && Math.Abs(dy) < 2)
+        var dx = live.CenterX - frozen.CenterX;
+        var dy = live.CenterY - frozen.CenterY;
+        var iou = frozen.IoU(live);
+        if (iou >= 0.45 && Math.Abs(dx) <= 10 && Math.Abs(dy) <= 8)
             return frozen;
-        return frozen.Offset(dx, dy);
+        if (iou < 0.28)
+            return frozen;
+
+        var stepX = Math.Clamp(dx, -Math.Max(6, frozen.Width / 4), Math.Max(6, frozen.Width / 4));
+        var stepY = Math.Clamp(dy, -Math.Max(6, frozen.Height / 4), Math.Max(6, frozen.Height / 4));
+        if (Math.Abs(stepX) < 3 && Math.Abs(stepY) < 3)
+            return frozen;
+        return frozen.Offset(stepX, stepY);
     }
 }

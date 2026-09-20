@@ -8,7 +8,7 @@ public static class OcrModelInstaller
     [
         new(
             "ch_PP-OCRv5_rec_mobile.onnx",
-            "OCR CJK/giapponese (riconoscimento)",
+            "CJK/Japanese OCR (recognition)",
             1_000_000,
             [
                 "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile.onnx",
@@ -16,7 +16,7 @@ public static class OcrModelInstaller
             ]),
         new(
             "ppocrv5_dict.txt",
-            "OCR CJK dizionario",
+            "CJK OCR dictionary",
             5_000,
             [
                 "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/ppocrv5_dict.txt",
@@ -24,7 +24,7 @@ public static class OcrModelInstaller
             ]),
         new(
             "japan_PP-OCRv4_rec_mobile.onnx",
-            "OCR giapponese (specialistico)",
+            "Japanese OCR (specialized)",
             500_000,
             [
                 "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile.onnx",
@@ -32,7 +32,7 @@ public static class OcrModelInstaller
             ]),
         new(
             "japan_dict.txt",
-            "OCR giapponese dizionario",
+            "Japanese OCR dictionary",
             1_000,
             [
                 "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile/japan_dict.txt",
@@ -48,7 +48,7 @@ public static class OcrModelInstaller
         AppPaths.EnsureCreated();
         Directory.CreateDirectory(AppPaths.OcrModelDir);
         using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.1");
 
         foreach (var file in Files)
         {
@@ -127,7 +127,7 @@ public static class OcrModelInstaller
         }
         catch
         {
-            // cartella dell'exe non scrivibile
+            // exe folder is not writable
         }
     }
 

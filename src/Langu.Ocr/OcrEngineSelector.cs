@@ -21,7 +21,7 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
             return true;
         if (_kind == OcrEngineKind.Windows)
             return false;
-        return force || searchAsian && !LanguageDetector.IsLatinHint(languageHint);
+        return force || _kind == OcrEngineKind.Auto;
     }
 
     public Task<IReadOnlyList<OcrLine>> RecognizeAsync(
@@ -46,27 +46,13 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
                 ? await _rapid.RecognizeAsync(frame, languageHint, cancellationToken)
                 : [];
 
-        var wantAsian = searchAsian
-                        && _rapid.IsAvailable
-                        && !LanguageDetector.IsLatinHint(languageHint);
-
-        var windowsTask = _windows.IsAvailable
-            ? _windows.RecognizeAsync(frame, languageHint, cancellationToken)
-            : Task.FromResult<IReadOnlyList<OcrLine>>([]);
-
-        if (!wantAsian)
-            return await windowsTask;
-
-        var rapidTask = Task.Run(() =>
-        {
-            var task = LanguageDetector.IsCjkHint(languageHint)
-                ? _rapid.RecognizeAsync(frame, languageHint, cancellationToken)
-                : _rapid.RecognizeCjkAsync(frame, cancellationToken);
-            return task.GetAwaiter().GetResult();
-        }, cancellationToken);
-
-        await Task.WhenAll(windowsTask, rapidTask);
-        return MergeSmart(await windowsTask, await rapidTask);
+        var windows = _windows.IsAvailable
+            ? await _windows.RecognizeAsync(frame, languageHint, cancellationToken)
+            : [];
+        if (!_rapid.IsAvailable || !OcrAutoRouter.NeedsRapid(windows, languageHint, searchAsian))
+            return windows;
+        var rapid = await _rapid.RecognizeAsync(frame, languageHint, cancellationToken, light: windows.Count >= 3);
+        return OcrAutoRouter.Merge(windows, rapid);
     }
 
     public async Task RecognizeStreamingAsync(
@@ -88,7 +74,7 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
             return;
         }
 
-        if (_kind == OcrEngineKind.Windows || !WillRunRapid(languageHint, searchAsian, forceRapid))
+        if (_kind == OcrEngineKind.Windows || !_rapid.IsAvailable)
         {
             onPartial(
                 _windows.IsAvailable
@@ -98,54 +84,28 @@ public sealed class OcrEngineSelector : IOcrEngine, IDisposable
             return;
         }
 
-        var windowsTask = _windows.IsAvailable
-            ? _windows.RecognizeAsync(frame, languageHint, cancellationToken)
-            : Task.FromResult<IReadOnlyList<OcrLine>>([]);
-        var rapidTask = Task.Run(() =>
-        {
-            var task = forceRapid || LanguageDetector.IsCjkHint(languageHint)
-                ? _rapid.RecognizeAsync(frame, languageHint, cancellationToken)
-                : _rapid.RecognizeCjkAsync(frame, cancellationToken);
-            return task.GetAwaiter().GetResult();
-        }, cancellationToken);
-
-        var windows = await windowsTask;
+        var windows = _windows.IsAvailable
+            ? await _windows.RecognizeAsync(frame, languageHint, cancellationToken)
+            : [];
         onPartial(windows, "windows");
-        onPartial(MergeSmart(windows, await rapidTask), "rapid");
+
+        if (!forceRapid && !OcrAutoRouter.NeedsRapid(windows, languageHint, searchAsian))
+        {
+            onPartial(windows, "done");
+            return;
+        }
+
+        onPartial([], "rapid-start");
+        var rapid = await _rapid.RecognizeAsync(frame, languageHint, cancellationToken, light: windows.Count >= 3);
+        onPartial(OcrAutoRouter.Merge(windows, rapid), "rapid");
     }
 
     private string SelectedLabel => _kind switch
     {
         OcrEngineKind.RapidOcr => _rapid.Name,
         OcrEngineKind.Windows => _windows.Name,
-        _ => "Auto (Windows + asiatico)"
+        _ => "Auto (Windows, Rapid for gaps)"
     };
-
-    private static IReadOnlyList<OcrLine> MergeSmart(IReadOnlyList<OcrLine> windows, IReadOnlyList<OcrLine> rapid)
-    {
-        var list = windows.ToList();
-        foreach (var line in rapid)
-        {
-            if (!LanguageDetector.HasReliableCjk(line.Text) && !LanguageDetector.IsUsefulOcr(line.Text))
-                continue;
-
-            var overlap = list.FirstOrDefault(existing => existing.Bounds.Overlaps(line.Bounds, 0.4));
-            if (overlap is null)
-            {
-                if (LanguageDetector.HasReliableCjk(line.Text) || LanguageDetector.IsUsefulOcr(line.Text))
-                    list.Add(line);
-                continue;
-            }
-
-            var keep = OcrMergeRules.Prefer(overlap, line);
-            if (keep == overlap)
-                continue;
-            list.Remove(overlap);
-            list.Add(keep);
-        }
-
-        return list;
-    }
 
     public void Dispose() => _rapid.Dispose();
 }

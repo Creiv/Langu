@@ -41,6 +41,19 @@ public sealed class CapturedFrame
 
     public TextQuad MapToScreen(TextQuad quad) =>
         quad.IsValid ? quad.Map(MapToScreen) : TextQuad.FromRect(MapToScreen(quad.Bounds));
+
+    public ScreenRect MapFromScreen(ScreenRect screen)
+    {
+        if (ScreenBounds.IsEmpty || Width < 1 || Height < 1)
+            return ScreenRect.Empty;
+        if (PixelAligned)
+            return new ScreenRect(screen.X - ScreenBounds.X, screen.Y - ScreenBounds.Y, screen.Width, screen.Height);
+        return new ScreenRect(
+            (int)Math.Round((screen.X - ScreenBounds.X) / ScaleX, MidpointRounding.AwayFromZero),
+            (int)Math.Round((screen.Y - ScreenBounds.Y) / ScaleY, MidpointRounding.AwayFromZero),
+            Math.Max(1, (int)Math.Round(screen.Width / ScaleX, MidpointRounding.AwayFromZero)),
+            Math.Max(1, (int)Math.Round(screen.Height / ScaleY, MidpointRounding.AwayFromZero)));
+    }
 }
 
 public static class ScreenMapping
@@ -94,6 +107,7 @@ public sealed record OverlayItem
     public required string SourceLanguage { get; init; }
     public TextAppearance Appearance { get; init; } = TextAppearance.Fallback(ScreenRect.Empty);
     public OverlayItemKind Kind { get; init; } = OverlayItemKind.Probe;
+    public bool Highlighted { get; init; }
     public TextQuad Shape => Quad.IsValid ? Quad : TextQuad.FromRect(ScreenBounds);
 }
 

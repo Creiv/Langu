@@ -38,6 +38,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private int _focusAnchorY;
     private ScreenRect _focusPreview;
     private ScreenRect _focusCrop;
+    private string _hoverId = "";
 
     public TranslationPipeline(AppSettings settings, IOverlayController overlay)
     {
@@ -54,12 +55,12 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
     public async Task PrepareModelsAsync(IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
     {
-        _status.Message = "Download e caricamento modelli…";
+        _status.Message = "Downloading and loading models…";
         RaiseStatus();
         await OcrModelInstaller.EnsureAsync(progress, cancellationToken);
         await _translator.InitializeAsync(progress, cancellationToken);
         _status.ModelsReady = _translator.IsReady;
-        _status.Message = _translator.IsReady ? "Modelli pronti" : _translator.UnavailableReason ?? "Modelli non pronti";
+        _status.Message = _translator.IsReady ? "Models ready" : _translator.UnavailableReason ?? "Models not ready";
         RaiseStatus();
     }
 
@@ -87,7 +88,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _bounds = _capture.CurrentScreenBounds;
         _loopCts = new CancellationTokenSource();
         _status.Running = true;
-        _status.Message = $"Pronto · tieni premuto {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
+        _status.Message = $"Ready · hold {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
         _status.Warning = BuildWarning();
         RaiseStatus();
         _loop = Task.Run(() => LoopAsync(_loopCts.Token));
@@ -127,7 +128,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _hud = OcrHudState.Hidden;
         _overlay.SetHud(_hud);
         _overlay.Update(Array.Empty<OverlayItem>(), ScreenRect.Empty);
-        _status.Message = "In pausa";
+        _status.Message = "Paused";
         RaiseStatus();
     }
 
@@ -148,13 +149,14 @@ public sealed class TranslationPipeline : IAsyncDisposable
             _probeHeld = true;
             if (_bounds.IsEmpty && _capture is not null)
                 _bounds = _capture.CurrentScreenBounds;
-            SetHud(OcrHudState.Busy("Riconoscimento…"));
-            _status.Message = "Riconoscimento…";
+            SetHud(OcrHudState.Busy("Recognizing…"));
+            _status.Message = "Recognizing…";
             RaiseStatus();
         }
         else
         {
             _probeHeld = false;
+            _hoverId = "";
             ClearFocusState();
             _hud = OcrHudState.Hidden;
             lock (_stateLock)
@@ -162,10 +164,10 @@ public sealed class TranslationPipeline : IAsyncDisposable
             Publish();
             var pending = CountBusy();
             _status.Message = pending > 0
-                ? $"Traduzione in corso ({pending})…"
+                ? $"Translating ({pending})…"
                 : _pins.Count == 0
-                    ? $"Pronto · tieni premuto {ProbeKeys.NameOf(_settings.ProbeKeyVk)}"
-                    : $"{_pins.Count} traduzioni fissate · tieni premuto {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
+                    ? $"Ready · hold {ProbeKeys.NameOf(_settings.ProbeKeyVk)}"
+                    : $"{_pins.Count} pinned translations · hold {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
             RaiseStatus();
         }
 
@@ -173,6 +175,18 @@ public sealed class TranslationPipeline : IAsyncDisposable
     }
 
     public bool HasHit(int screenX, int screenY) => FindHit(screenX, screenY) is not null;
+
+    public void SetPointer(int screenX, int screenY)
+    {
+        if (!_probeHeld || _focusSelecting)
+            return;
+        var hit = FindHit(screenX, screenY);
+        var id = hit?.Id ?? "";
+        if (id == _hoverId)
+            return;
+        _hoverId = id;
+        Publish();
+    }
 
     public void BeginFocusPick(int screenX, int screenY)
     {
@@ -185,7 +199,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _focusAnchorX = screenX;
         _focusAnchorY = screenY;
         _focusPreview = NormalizePick(screenX, screenY, screenX, screenY);
-        SetHud(OcrHudState.Busy("Trascina un'area da rileggere"));
+        SetHud(OcrHudState.Busy("Drag an area to rescan"));
         _overlay.SetFocusBand(_focusPreview, selecting: true);
     }
 
@@ -215,7 +229,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
             _overlay.SetFocusBand(_focusCrop, selecting: false);
             SetHud(_focusCrop.IsEmpty
                 ? OcrHudState.Ready(ReadyHudText())
-                : OcrHudState.Busy("Analisi area…"));
+                : OcrHudState.Busy("Scanning area…"));
             return;
         }
 
@@ -223,15 +237,15 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _focusPreview = rect;
         _focusPending = true;
         _gate.Reset();
-        SetHud(OcrHudState.Busy("Analisi area selezionata…"));
+        SetHud(OcrHudState.Busy("Scanning selected area…"));
         _overlay.SetFocusBand(_focusCrop, selecting: false);
         TryWake();
     }
 
-    private bool HasCjkOverlay()
+    private bool HasStableOverlay()
     {
         lock (_stateLock)
-            return _probes.Concat(_pins).Any(item => LanguageDetector.HasReliableCjk(item.SourceText));
+            return _probes.Count > 0 || _pins.Count > 0;
     }
 
     public void HandleClick(int screenX, int screenY, bool right)
@@ -240,24 +254,43 @@ public sealed class TranslationPipeline : IAsyncDisposable
             return;
 
         List<OverlayItem> targets;
+        var crop = !_focusCrop.IsEmpty ? _focusCrop : ScreenRect.Empty;
         if (right)
         {
             lock (_stateLock)
-                targets = _probes.Where(p => p.Kind == OverlayItemKind.Probe).ToList();
+            {
+                targets = _probes
+                    .Where(p => p.Kind == OverlayItemKind.Probe)
+                    .Where(p => crop.IsEmpty || InRegion(p, crop))
+                    .ToList();
+            }
         }
         else
         {
             var hit = FindHit(screenX, screenY);
-            targets = hit is null ? [] : [hit];
+            if (hit is { Kind: OverlayItemKind.Translated })
+            {
+                DismissPin(hit);
+                return;
+            }
+
+            targets = hit is null || hit.Kind == OverlayItemKind.Busy ? [] : [hit];
         }
 
         if (targets.Count == 0)
             return;
 
-        foreach (var target in targets)
+        List<OverlayItem> expanded;
+        lock (_stateLock)
+        {
+            expanded = ExpandReadingTargets(targets, _probes.Concat(_pins).ToList());
+            if (right && !crop.IsEmpty)
+                expanded = expanded.Where(p => InRegion(p, crop)).ToList();
+        }
+        foreach (var target in expanded)
             MarkBusy(target);
         Publish();
-        _ = Task.Run(() => TranslateManyAsync(targets));
+        _ = Task.Run(() => TranslateManyAsync(expanded));
     }
 
     private OverlayItem? FindHit(int screenX, int screenY)
@@ -265,11 +298,10 @@ public sealed class TranslationPipeline : IAsyncDisposable
         lock (_stateLock)
         {
             return _probes.Concat(_pins)
-                .Where(p => p.Kind != OverlayItemKind.Translated)
                 .OrderBy(p => p.Shape.IsValid ? p.Shape.Length * p.Shape.Thickness : p.ScreenBounds.Area)
                 .FirstOrDefault(p => p.Shape.IsTilted
-                    ? p.Shape.Contains(screenX, screenY, 18)
-                    : p.ScreenBounds.Inflate(10, 8).Contains(screenX, screenY));
+                    ? p.Shape.Contains(screenX, screenY, 6)
+                    : p.ScreenBounds.Inflate(4, 2).Contains(screenX, screenY));
         }
     }
 
@@ -292,6 +324,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _jobCts.Dispose();
         _jobCts = new();
         _probeHeld = false;
+        _hoverId = "";
         _prunePinsNext = false;
         _snapPins = false;
         _lastOcr = [];
@@ -308,7 +341,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         _overlay.Update(Array.Empty<OverlayItem>(), ScreenRect.Empty);
         _status.LastOcrCount = 0;
         _status.LastTranslatedCount = 0;
-        _status.Message = $"Annullato · tieni premuto {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
+        _status.Message = $"Cancelled · hold {ProbeKeys.NameOf(_settings.ProbeKeyVk)}";
         RaiseStatus();
         TryWake();
     }
@@ -348,7 +381,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 var frame = await _capture.CaptureAsync(cancellationToken);
                 if (frame is null || frame.Width < 8 || frame.Height < 8)
                 {
-                    _status.Warning = BuildWarning() ?? "Nessun fotogramma.";
+                    _status.Warning = BuildWarning() ?? "No frame.";
                     RaiseStatus();
                     await WaitAsync(delay, cancellationToken);
                     continue;
@@ -364,7 +397,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
                     continue;
                 }
 
-                if (!_focusPending && !_prunePinsNext && !_gate.HasChanged(ocrFrame, 8) && _probes.Count > 0)
+                if (!_focusPending && !_prunePinsNext && HasStableOverlay() && !_gate.HasChanged(ocrFrame, 18))
                 {
                     if (_probeHeld && !_hud.Working && !_focusSelecting)
                         SetHud(OcrHudState.Ready(ReadyHudText()));
@@ -372,10 +405,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
                     continue;
                 }
 
-                var searchAsian = focused
-                    || !LanguageDetector.IsLatinHint(_settings.SourceLanguage)
-                       && (_prunePinsNext || !HasCjkOverlay());
-                var forceRapid = focused && _settings.OcrEngine != OcrEngineKind.Windows;
+                var searchAsian = true;
+                var forceRapid = _settings.OcrEngine == OcrEngineKind.RapidOcr;
                 var scannedFocus = focused;
                 await ScanFrameAsync(
                     ocrFrame,
@@ -394,7 +425,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
             {
                 _status.Warning = ex.Message;
                 if (_probeHeld)
-                    SetHud(OcrHudState.Ready("OCR interrotto — puoi rilasciare"));
+                    SetHud(OcrHudState.Ready("OCR stopped — you can release"));
                 RaiseStatus();
             }
 
@@ -411,18 +442,19 @@ public sealed class TranslationPipeline : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var epoch = _workEpoch;
-        var rapid = _ocr.WillRunRapid(_settings.SourceLanguage, searchAsian, forceRapid);
+        var ocrHint = LanguageDetector.IsLatinHint(_settings.SourceLanguage) ? null : _settings.SourceLanguage;
+        var rapid = _ocr.WillRunRapid(ocrHint, searchAsian, forceRapid);
         var area = replaceRegion.IsEmpty ? "" : "area · ";
         SetHud(OcrHudState.Busy(rapid
-            ? $"Elaborazione · {area}Windows OCR"
-            : $"Elaborazione · {area}OCR"));
+            ? $"Working · {area}Windows OCR"
+            : $"Working · {area}OCR"));
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _jobCts.Token);
         try
         {
             await _ocr.RecognizeStreamingAsync(
                 ocrFrame,
-                _settings.SourceLanguage,
+                ocrHint,
                 searchAsian,
                 forceRapid,
                 (lines, stage) =>
@@ -432,11 +464,11 @@ public sealed class TranslationPipeline : IAsyncDisposable
                     if (stage is "rapid-start")
                     {
                         if (_probeHeld)
-                            SetHud(OcrHudState.Busy($"Elaborazione · {area}RapidOCR"));
+                            SetHud(OcrHudState.Busy($"Working · {area}RapidOCR"));
                         return;
                     }
 
-                    ApplyOcr(lines, ocrFrame, finalize: stage is not "windows" || !rapid, replaceRegion);
+                    ApplyOcr(lines, ocrFrame, finalize: stage is not "windows", replaceRegion);
                     _status.LastOcrCount = lines.Count;
                     _status.LastTranslatedCount = _pins.Count;
                     _status.Warning = BuildWarning();
@@ -448,13 +480,13 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
                     if (stage is "windows" && rapid)
                     {
-                        SetHud(OcrHudState.Busy($"Elaborazione · {area}RapidOCR · {CountProbes()} box"));
-                        _status.Message = $"Box {CountProbes()} · RapidOCR in corso";
+                        SetHud(OcrHudState.Busy($"Working · {area}RapidOCR · {CountProbes()} boxes"));
+                        _status.Message = $"Boxes {CountProbes()} · RapidOCR running";
                     }
                     else
                     {
                         SetHud(OcrHudState.Ready(ReadyHudText()));
-                        _status.Message = $"Box {CountProbes()} · fissate {_pins.Count} · click sx una / dx tutte";
+                        _status.Message = $"Boxes {CountProbes()} · pinned {_pins.Count} · left one / right all";
                     }
 
                     RaiseStatus();
@@ -478,9 +510,10 @@ public sealed class TranslationPipeline : IAsyncDisposable
             _bounds = frame.ScreenBounds;
 
         var incoming = new List<OverlayItem>();
-        foreach (var line in lines.Where(l => l.Confidence >= _settings.MinOcrConfidence && !LooksLikeNoise(l)))
+        foreach (var line in lines.Where(l =>
+                     (LanguageDetector.HasCjk(l.Text) || l.Confidence >= _settings.MinOcrConfidence) && !LooksLikeNoise(l)))
         {
-            var screen = frame.MapToScreen(line.Bounds).Inflate(2, 2);
+            var screen = frame.MapToScreen(line.Bounds);
             var quad = frame.MapToScreen(line.Shape);
             var guess = _detector.DetectWithHint(line.Text, _settings.SourceLanguage);
             incoming.Add(new OverlayItem
@@ -488,18 +521,27 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 Id = MakeId(line.Text, screen),
                 SourceText = line.Text,
                 SourceLanguage = guess.Iso639,
-                ScreenBounds = quad.IsValid ? quad.Bounds.Inflate(2, 2) : screen,
-                Quad = quad,
+                ScreenBounds = screen,
+                Quad = quad.IsValid && quad.Bounds.Height <= screen.Height + 3 ? quad : TextQuad.FromRect(screen),
                 Appearance = TextAppearance.FromFrame(frame, line.Bounds, line.Text),
                 Kind = OverlayItemKind.Probe
             });
         }
 
+        incoming = OcrBoxDedup.Merge(incoming);
         incoming = OcrBlockGrouper.Merge(incoming);
+        incoming = MenuBlockSplitter.Split(incoming);
+        incoming = OcrBoxDedup.Merge(incoming);
 
         var pruneAll = finalize && _prunePinsNext && replaceRegion.IsEmpty;
         if (finalize && replaceRegion.IsEmpty)
             _prunePinsNext = false;
+
+        if (incoming.Count == 0 && !pruneAll && replaceRegion.IsEmpty)
+        {
+            Publish();
+            return;
+        }
 
         lock (_stateLock)
         {
@@ -525,14 +567,17 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 ? next
                 : _lastOcr.Where(item => !InRegion(item, replaceRegion)).Concat(incoming).ToList();
             var busy = _probes.Where(p => p.Kind == OverlayItemKind.Busy).ToList();
-            var snapPins = _snapPins;
-            RematchPins(
-                replaceRegion.IsEmpty ? next : incoming,
-                pruneAll || finalize && !replaceRegion.IsEmpty,
-                replaceRegion,
-                snapPins);
-            if (snapPins && next.Count > 0)
-                _snapPins = false;
+            if (finalize)
+            {
+                var snapPins = _snapPins;
+                RematchPins(
+                    replaceRegion.IsEmpty ? next : incoming,
+                    pruneAll,
+                    replaceRegion,
+                    snapPins);
+                if (snapPins && next.Count > 0)
+                    _snapPins = false;
+            }
             _probes.Clear();
             foreach (var item in next)
             {
@@ -587,9 +632,19 @@ public sealed class TranslationPipeline : IAsyncDisposable
         {
             var iou = item.ScreenBounds.IoU(pin.ScreenBounds);
             var same = SimilarSource(pin.SourceText, item.SourceText);
-            if (!same && iou < 0.32)
+            var near = Math.Abs(item.ScreenBounds.CenterX - pin.ScreenBounds.CenterX) <= Math.Max(24, pin.ScreenBounds.Width / 2)
+                       && Math.Abs(item.ScreenBounds.CenterY - pin.ScreenBounds.CenterY) <= Math.Max(16, pin.ScreenBounds.Height);
+            if (same)
+            {
+                if (iou < 0.12 && !near)
+                    continue;
+            }
+            else if (iou < 0.55)
+            {
                 continue;
-            var score = (same ? 1.4 : 0) + iou;
+            }
+
+            var score = (same ? 1.6 : 0) + iou;
             if (score <= bestScore)
                 continue;
             bestScore = score;
@@ -624,7 +679,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         var job = _jobCts.Token;
         if (!_translator.IsReady)
         {
-            _status.Warning = _translator.UnavailableReason ?? "Traduttore non pronto. Scarica i modelli.";
+            _status.Warning = _translator.UnavailableReason ?? "Translator not ready. Download models.";
             foreach (var target in targets)
                 Pin(target, target.SourceText, target.SourceLanguage);
             RaiseStatus();
@@ -636,46 +691,15 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
         var targetIso = AppSettings.TargetIso(_settings.TargetLanguage);
         var targetNllb = AppSettings.TargetNllbCode(_settings.TargetLanguage);
+        var groups = OcrReadingLayout.Group(targets);
 
-        foreach (var target in targets)
+        foreach (var group in groups)
         {
             try
             {
                 if (_workEpoch != epoch || job.IsCancellationRequested)
                     return;
-
-                var guess = _detector.DetectWithHint(target.SourceText, _settings.SourceLanguage);
-                if (IsAlreadyTarget(guess, target.SourceText, targetIso))
-                {
-                    Pin(target, target.SourceText, guess.Iso639);
-                    continue;
-                }
-
-                if (!_cache.TryGet(target.SourceText, _settings.TargetLanguage, out var translated) ||
-                    string.IsNullOrWhiteSpace(translated) || SameUtterance(translated, target.SourceText))
-                {
-                    translated = await TranslateReliableAsync(
-                        target.SourceText, guess, targetNllb, job);
-                    if (_workEpoch != epoch)
-                        return;
-                    if (!string.IsNullOrWhiteSpace(translated) && !SameUtterance(translated, target.SourceText))
-                        _cache.Set(target.SourceText, _settings.TargetLanguage, translated);
-                }
-
-                if (_workEpoch != epoch)
-                    return;
-                if (string.IsNullOrWhiteSpace(translated) || SameUtterance(translated, target.SourceText))
-                {
-                    _status.Warning = "Traduzione non riuscita. Riprova sulla box.";
-                    if (_probeHeld)
-                        SetHud(OcrHudState.Error("Traduzione non riuscita — clicca di nuovo"));
-                    ReleaseBusy(target);
-                    RaiseStatus();
-                    continue;
-                }
-
-                Pin(target, translated, guess.Iso639);
-                Publish();
+                await TranslateGroupAsync(group, targetIso, targetNllb, epoch, job);
             }
             catch (OperationCanceledException)
             {
@@ -687,18 +711,122 @@ public sealed class TranslationPipeline : IAsyncDisposable
                     return;
                 _status.Warning = ex.Message;
                 if (_probeHeld)
-                    SetHud(OcrHudState.Error("Traduzione interrotta — clicca di nuovo"));
-                ReleaseBusy(target);
+                    SetHud(OcrHudState.Error("Translation cancelled — click again"));
+                foreach (var member in group.Members)
+                    ReleaseBusy(member);
                 RaiseStatus();
-            }
-            finally
-            {
-                Interlocked.Decrement(ref _busyCount);
             }
         }
 
         if (_workEpoch == epoch)
             Publish();
+    }
+
+    private static List<OverlayItem> ExpandReadingTargets(IReadOnlyList<OverlayItem> targets, IReadOnlyList<OverlayItem> visible)
+    {
+        var groups = OcrReadingLayout.Group(visible.Count > 0 ? visible : targets);
+        var expanded = new List<OverlayItem>();
+        foreach (var group in groups)
+        {
+            if (!group.Members.Any(member => targets.Any(target => SameBox(target, member))))
+                continue;
+            if (group.Kind == ReadingKind.Sentence)
+            {
+                foreach (var member in group.Members)
+                {
+                    if (expanded.All(existing => !SameBox(existing, member)))
+                        expanded.Add(member);
+                }
+            }
+            else
+            {
+                foreach (var member in group.Members.Where(member => targets.Any(target => SameBox(target, member))))
+                {
+                    if (expanded.All(existing => !SameBox(existing, member)))
+                        expanded.Add(member);
+                }
+            }
+        }
+
+        return expanded.Count > 0 ? expanded : targets.ToList();
+    }
+
+    private async Task TranslateGroupAsync(
+        ReadingGroup group,
+        string targetIso,
+        string targetNllb,
+        int epoch,
+        CancellationToken job)
+    {
+        if (group.Kind == ReadingKind.Sentence && group.Members.Count > 1)
+        {
+            var joined = OcrReadingLayout.JoinSources(group.Members);
+            var guess = _detector.DetectWithHint(joined, _settings.SourceLanguage);
+            var translated = await TranslateOneAsync(joined, guess, targetNllb, targetIso, job);
+            if (_workEpoch != epoch)
+                return;
+            if (string.IsNullOrWhiteSpace(translated))
+            {
+                foreach (var member in group.Members)
+                    ReleaseBusy(member);
+                return;
+            }
+
+            var parts = OcrReadingLayout.Allocate(translated, group.Members.Select(m => m.SourceText).ToList());
+            for (var i = 0; i < group.Members.Count; i++)
+            {
+                Pin(group.Members[i], i < parts.Count ? parts[i] : translated, guess.Iso639);
+                Interlocked.Decrement(ref _busyCount);
+            }
+
+            Publish();
+            return;
+        }
+
+        foreach (var target in group.Members)
+        {
+            if (_workEpoch != epoch || job.IsCancellationRequested)
+                return;
+            var guess = _detector.DetectWithHint(target.SourceText, _settings.SourceLanguage);
+            var translated = await TranslateOneAsync(target.SourceText, guess, targetNllb, targetIso, job);
+            if (_workEpoch != epoch)
+                return;
+            if (string.IsNullOrWhiteSpace(translated) || SameUtterance(translated, target.SourceText))
+            {
+                _status.Warning = "Translation failed. Try that box again.";
+                if (_probeHeld)
+                    SetHud(OcrHudState.Error("Translation failed — click again"));
+                ReleaseBusy(target);
+            }
+            else
+            {
+                Pin(target, translated, guess.Iso639);
+                Publish();
+            }
+
+            Interlocked.Decrement(ref _busyCount);
+        }
+    }
+
+    private async Task<string> TranslateOneAsync(
+        string text,
+        LanguageGuess guess,
+        string targetNllb,
+        string targetIso,
+        CancellationToken job)
+    {
+        if (IsAlreadyTarget(guess, text, targetIso))
+            return text;
+        if (_cache.TryGet(text, _settings.TargetLanguage, out var cached)
+            && !string.IsNullOrWhiteSpace(cached)
+            && !SameUtterance(cached, text)
+            && !LooksLikeBrokenUi(cached))
+            return cached;
+
+        var translated = await TranslateReliableAsync(text, guess, targetNllb, targetIso, job);
+        if (!string.IsNullOrWhiteSpace(translated) && !SameUtterance(translated, text))
+            _cache.Set(text, _settings.TargetLanguage, translated);
+        return translated;
     }
 
     private bool IsAlreadyTarget(LanguageGuess guess, string text, string targetIso)
@@ -736,20 +864,45 @@ public sealed class TranslationPipeline : IAsyncDisposable
     }
 
     private async Task<string> TranslateReliableAsync(
-        string text, LanguageGuess guess, string targetNllb, CancellationToken job)
+        string text, LanguageGuess guess, string targetNllb, string targetIso, CancellationToken job)
     {
-        foreach (var source in SourceCandidates(guess, text))
+        var sourceText = LanguageDetector.HasCjk(text) && text.Length <= 32
+            ? UiText.NormalizeSource(text)
+            : text.Trim();
+        if (sourceText.Length == 0)
+            sourceText = text.Trim();
+        if (GameUiGlossary.TryTranslate(sourceText, targetIso, out var known))
+            return UiText.NormalizeTranslation(known, sourceText);
+
+        foreach (var source in SourceCandidates(guess, sourceText))
         {
             if (string.Equals(source, targetNllb, StringComparison.OrdinalIgnoreCase))
                 continue;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(job);
             timeout.CancelAfter(TimeSpan.FromSeconds(25));
-            var translated = await _translator.TranslateAsync(text, source, targetNllb, timeout.Token);
-            if (!string.IsNullOrWhiteSpace(translated) && !SameUtterance(translated, text))
+            var translated = await _translator.TranslateAsync(sourceText, source, targetNllb, timeout.Token);
+            translated = UiText.NormalizeTranslation(translated, sourceText);
+            if (!string.IsNullOrWhiteSpace(translated)
+                && !SameUtterance(translated, text)
+                && !LooksLikeBrokenUi(translated)
+                && !UiText.LooksGluedLatin(translated))
                 return translated;
         }
 
-        return "";
+        return GameUiGlossary.TryTranslate(sourceText, targetIso, out var fallback) ? fallback : "";
+    }
+
+    private static bool LooksLikeBrokenUi(string text)
+    {
+        var t = text.Trim();
+        if (t.Length == 0)
+            return true;
+        var words = t.Split([' ', ',', ';', '.', '!', '?', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 3 && words.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1)
+            return true;
+        return UiText.LooksGluedLatin(t)
+               || t.Contains("storia, storia", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("story, story", StringComparison.OrdinalIgnoreCase);
     }
 
     private IEnumerable<string> SourceCandidates(LanguageGuess guess, string text)
@@ -811,6 +964,19 @@ public sealed class TranslationPipeline : IAsyncDisposable
         }
     }
 
+    private void DismissPin(OverlayItem pin)
+    {
+        lock (_stateLock)
+        {
+            _pins.RemoveAll(p => p.Id == pin.Id || p.ScreenBounds.IoU(pin.ScreenBounds) > 0.4);
+            _probes.RemoveAll(p => p.Id == pin.Id || p.ScreenBounds.IoU(pin.ScreenBounds) > 0.4);
+        }
+
+        if (_hoverId == pin.Id)
+            _hoverId = "";
+        Publish();
+    }
+
     private void Pin(OverlayItem target, string translated, string language)
     {
         lock (_stateLock)
@@ -840,8 +1006,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
     {
         var boxes = CountProbes();
         return boxes > 0
-            ? $"Pronto · {boxes} box — puoi cliccare"
-            : "Pronto — nessuna box, puoi rilasciare";
+            ? $"Ready · {boxes} boxes — you can click"
+            : "Ready — no boxes, you can release";
     }
 
     private void Publish()
@@ -861,6 +1027,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
         {
             shown = _pins
                 .Concat(_probes.Where(p => _probeHeld || p.Kind != OverlayItemKind.Probe))
+                .Select(p => p with { Highlighted = p.Id == _hoverId })
                 .ToList();
             bounds = _bounds;
         }
@@ -908,21 +1075,21 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private string? BuildWarning()
     {
         if (!_translator.IsReady)
-            return _translator.UnavailableReason ?? "Scarica i modelli per tradurre offline.";
+            return _translator.UnavailableReason ?? "Download models to translate offline.";
 
         if (_settings.CaptureMode == CaptureMode.Window)
         {
             var window = WindowEnumeration.TryGetWindow(_settings.TargetWindowHandle);
             if (window is null)
-                return "Nessuna finestra selezionata.";
+                return "No window selected.";
             if (window.IsMinimized)
-                return "La finestra target è minimizzata.";
+                return "The target window is minimized.";
             if (window.LooksFullscreen)
-                return "La finestra copre tutto lo schermo. Se è fullscreen esclusivo, passa a borderless.";
+                return "The window is fullscreen. If it is exclusive fullscreen, switch to borderless.";
         }
 
         if (_settings.CaptureMode == CaptureMode.Region && _settings.RegionBounds.IsEmpty)
-            return "Seleziona una regione dello schermo.";
+            return "Select a screen region.";
 
         return null;
     }
@@ -930,6 +1097,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private static bool LooksLikeNoise(OcrLine line)
     {
         var trimmed = line.Text.Trim();
+        if (LanguageDetector.HasCjk(trimmed))
+            return OcrLineFilter.IsLikelyIcon(trimmed, line.Bounds);
         return !OcrLineFilter.ShouldTranslate(trimmed) || OcrLineFilter.IsLikelyIcon(trimmed, line.Bounds);
     }
 

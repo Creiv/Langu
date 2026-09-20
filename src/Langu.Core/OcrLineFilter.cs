@@ -13,10 +13,14 @@ public static partial class OcrLineFilter
         if (Timestamp().IsMatch(t) || ViewCount().IsMatch(t) || Metric().IsMatch(t))
             return true;
 
+        if (PlayerTag().IsMatch(t))
+            return true;
+
         var lower = t.ToLowerInvariant();
         return lower is "4k" or "hdr" or "8k" or "hd" or "premium" or "subscribe" or "iscritto"
             or "views" or "visualizzazioni" or "translated to english" or "tradotto in inglese"
-            or "mostra altro" or "show more" or "show less" or "rispondi" or "reply";
+            or "mostra altro" or "show more" or "show less" or "rispondi" or "reply"
+            or "1p" or "2p" or "3p" or "4p";
     }
 
     public static bool ShouldTranslate(string text) =>
@@ -42,7 +46,7 @@ public static partial class OcrLineFilter
             return true;
         if (square && small && t.Length <= 2 && !LanguageDetector.HasReliableCjk(t))
             return true;
-        if (square && bounds.Height < 26 && t.Length == 1)
+        if (square && bounds.Height < 26 && t.Length == 1 && !LanguageDetector.HasCjk(t))
             return true;
         if (symbols > letters && t.Length <= 6)
             return true;
@@ -102,6 +106,9 @@ public static partial class OcrLineFilter
 
     [GeneratedRegex(@"^(\d{1,2}:)?\d{1,2}:\d{2}$")]
     private static partial Regex Timestamp();
+
+    [GeneratedRegex(@"^\d{1,2}\s*[pP]$")]
+    private static partial Regex PlayerTag();
 
     [GeneratedRegex(@"^\d+([.,]\d+)?\s*[kmb]$", RegexOptions.IgnoreCase)]
     private static partial Regex ViewCount();

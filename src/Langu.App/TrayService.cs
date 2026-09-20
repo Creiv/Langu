@@ -17,7 +17,7 @@ public sealed class TrayService : IDisposable
         _icon = new NotifyIcon
         {
             Icon = CreateIcon(),
-            Text = "Langu — riconoscimento a tasto",
+            Text = "Langu — hold-key translator",
             Visible = true,
             ContextMenuStrip = BuildMenu()
         };
@@ -26,18 +26,18 @@ public sealed class TrayService : IDisposable
 
     public void SetRunning(bool running)
     {
-        _icon.Text = running ? "Langu — in esecuzione" : "Langu — in pausa";
+        _icon.Text = running ? "Langu — running" : "Langu — paused";
         if (_icon.ContextMenuStrip?.Items[0] is ToolStripMenuItem item)
-            item.Text = running ? "Pausa" : "Avvia";
+            item.Text = running ? "Pause" : "Start";
     }
 
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Avvia / Pausa", null, (_, _) => TogglePause?.Invoke());
-        menu.Items.Add("Impostazioni", null, (_, _) => OpenSettings?.Invoke());
+        menu.Items.Add("Start / Pause", null, (_, _) => TogglePause?.Invoke());
+        menu.Items.Add("Settings", null, (_, _) => OpenSettings?.Invoke());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Esci", null, (_, _) => ExitRequested?.Invoke());
+        menu.Items.Add("Exit", null, (_, _) => ExitRequested?.Invoke());
         return menu;
     }
 

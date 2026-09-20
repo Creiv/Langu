@@ -115,7 +115,7 @@ public sealed class CompositeCapture : IFrameCapture
             ? await Task.FromResult<IFrameCapture>(new GdiCapture(region))
             : await CreateMonitorCapture(monitor);
 
-        return new CompositeCapture(host, region, () => settings.RegionBounds, host.EngineName + "+regione");
+        return new CompositeCapture(host, region, () => settings.RegionBounds, host.EngineName + "+region");
     }
 
     private static Task<IFrameCapture> CreateMonitorCapture(MonitorInfo monitor)

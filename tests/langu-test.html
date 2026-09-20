@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>Langu — pagina di test</title>
+  <title>Langu — test page</title>
   <style>
     body { font-family: Segoe UI, "Yu Gothic UI", "Microsoft YaHei UI", sans-serif; background:#111; color:#eee; margin:24px; }
     h1, h2 { font-weight: 600; }
@@ -41,32 +41,32 @@
   </style>
 </head>
 <body>
-  <h1>Pagina di test Langu</h1>
-  <p>Tieni premuto il tasto sonda, clicca le box. Controlla: latino a sinistra, CJK centrato, testo storto, verticale, icone ignorate, tutte le righe del cartello.</p>
+  <h1>Langu test page</h1>
+  <p>Hold the probe key, then click the boxes. Check: Latin left-aligned, CJK centered, tilted text, vertical text, icons ignored, every sign line kept.</p>
 
-  <h2>Latino</h2>
+  <h2>Latin</h2>
   <div class="row white big">Hello world</div>
   <div class="row red mid">The quick brown fox jumps</div>
   <div class="row yellow mid">Bonjour le monde</div>
   <div class="row small">Small caption text over dark background</div>
 
-  <h2>Cartello a più righe</h2>
+  <h2>Multi-line sign</h2>
   <div class="stack">
     <p>営業時間 10:00-20:00</p>
     <p>定休日 水曜日</p>
     <p>ご来店ありがとうございます</p>
   </div>
 
-  <h2>Verticale</h2>
+  <h2>Vertical</h2>
   <div class="vert">焼肉定食</div>
 
-  <h2>Storto</h2>
+  <h2>Tilted</h2>
   <div class="row cream tilt mid">斜めの看板テキスト</div>
 
-  <h2>Icone (non devono diventare testo)</h2>
+  <h2>Icons (should not become text)</h2>
   <div class="row icons">▶ ★ ® ☆ ◆</div>
 
-  <h2>Pixel / immagine</h2>
+  <h2>Pixel / image</h2>
   <div class="row pixel">PIXELATED GAME TEXT</div>
   <canvas id="c" width="160" height="32"></canvas>
   <script>

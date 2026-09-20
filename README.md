@@ -1,53 +1,82 @@
 # Langu
 
-Traduttore a schermo offline per Windows. Tieni premuto un tasto, leggi il testo sullo schermo (latino e CJK) e clicca per tradurre.
-
-Autore: [Creiv](https://github.com/Creiv)
-
-## Requisiti
-
-- Windows 10/11 64 bit
-- .NET 8 SDK per compilare
-- Per la traduzione offline: modelli NLLB (pulsante **Scarica modelli** nell’app)
+Offline on-screen translator for Windows. Hold a key, read text on screen (Latin and CJK), and click to translate.
 
 ## Download
 
-Release pronta: [Langu 1.0.0](https://github.com/Creiv/Langu/releases/tag/v1.0.0)
+Ready-to-run release: [Langu 1.1.0](https://github.com/Creiv/Langu/releases/tag/v1.1.0)
 
-1. Scarica [Langu-1.0.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.0.0/Langu-1.0.0-win-x64.zip)
-2. Estrai e avvia `Langu.exe`
-3. In Langu: **Avvia**. Per tradurre offline usa **Scarica modelli**
+1. Download [Langu-1.1.0-win-x64.zip](https://github.com/Creiv/Langu/releases/download/v1.1.0/Langu-1.1.0-win-x64.zip)
+2. Extract the zip and start `Langu.exe`
+3. In Langu, click **Start**. For offline translation, click **Download models** once
 
-Non serve installare .NET.
+You do not need to install .NET.
 
-## Compilare
+## How to use
 
-1. Compila in Release, oppure pubblica un eseguibile autonomo:
+1. Click **Start** so Langu is running (tray icon + overlay armed).
+2. Hold the probe key (default **Alt**). Detected text is highlighted.
+3. Move the mouse over a highlight to see that you can click it.
+4. **Left-click** a highlight to translate that line. The translation covers the original text.
+5. **Right-click** to translate every visible highlight.
+6. **Left-click** a translation (while still holding the probe key) to dismiss it.
+7. Release the probe key. Translations stay pinned until you clear them.
+
+### Extra controls while holding the probe key
+
+| Action | What it does |
+| --- | --- |
+| Mouse-wheel button drag | Select a temporary area. After that, right-click translates only text inside that area |
+| Double-tap the probe key | Hide the overlay and cancel in-progress OCR / translations |
+| Hover | Stronger highlight on the line under the cursor |
+
+### Settings window
+
+- **Key** — hold this key to scan. **Press a key…** captures any key you tap next
+- **Translate into** — Italian or English
+- **What to read** — whole **Monitor**, a **Window**, or a fixed **Region**
+- **On-screen language** — auto-detect, or force Japanese / Chinese / Korean / others
+- **Engine**
+  - **Auto** — Windows OCR for layout; Rapid only fills gaps (CJK / empty areas)
+  - **Windows** — fast Latin
+  - **RapidOCR** — slower, better for Japanese / Chinese / Korean
+- **Responsiveness** — how often the hold-key scan refreshes
+- **Show boxes and translations** — turn the overlay on or off
+- **Clear translations** — drop every pinned translation
+- **Download models** — one-time download of OCR extras and the offline NLLB translator
+
+### Global shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+Shift+P | Start / pause |
+| Ctrl+Shift+W | Pick a window |
+| Ctrl+Shift+R | Pick a screen region |
+| Ctrl+Shift+L | Toggle Italian / English output |
+
+Tray menu: start/pause, settings, exit.
+
+Games work best in **borderless** or **windowed** mode. Exclusive fullscreen can block capture.
+
+## Build from source
+
+Requires Windows 10/11 64-bit and the .NET 8 SDK.
 
 ```bat
 dotnet publish src\Langu.App\Langu.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist\Langu
 ```
 
-2. Avvia `dist\Langu\Langu.exe`
-3. In Langu: **Avvia**, tieni premuto il tasto sonda, clic sinistro su una box, destro su tutte
+Run `dist\Langu\Langu.exe`.
 
-## Uso
-
-- Tasto sonda (predefinito Alt): mostra le box OCR
-- Click sinistro: traduce una box
-- Click destro: traduce tutte le box
-- Rotella: seleziona un’area da rileggere
-- Doppio tap sul tasto: cancella overlay e interrompe OCR/traduzioni
-
-## Test
+## Tests
 
 ```bat
 dotnet test src\Langu.Tests\Langu.Tests.csproj -c Debug
 dotnet run --project src\Langu.App\Langu.App.csproj -- --smoke
 ```
 
-Pagina di prova: `tests/langu-test.html`
+Sample page: `tests/langu-test.html`
 
-## Licenza
+## License
 
-Usa e modifica a tuo rischio. I modelli OCR e NLLB restano sotto le licenze dei rispettivi autori.
+Use and modify at your own risk. OCR and NLLB models remain under their own licenses.

@@ -5,24 +5,15 @@ namespace Langu.Ocr;
 
 internal static class ImageEnhance
 {
-    public static (SKBitmap Bitmap, float Scale) ForOcr(SKBitmap source)
-    {
-        var minSide = Math.Min(source.Width, source.Height);
-        var maxSide = Math.Max(source.Width, source.Height);
-        float scale;
-        if (maxSide >= 1600)
-            scale = 1.12f;
-        else if (minSide < 900)
-            scale = 900f / minSide;
-        else
-            scale = 1.35f;
-        if (maxSide * scale > 2200)
-            scale = 2200f / maxSide;
-        scale = Math.Clamp(scale, 1.05f, 2.2f);
-        return Scale(source, scale, contrast: true);
-    }
+    private static readonly SKSamplingOptions Nearest = new(SKFilterMode.Nearest, SKMipmapMode.None);
 
-    public static (SKBitmap Bitmap, float Scale) Scale(SKBitmap source, float scale, bool contrast)
+    public static (SKBitmap Bitmap, float Scale) ForOcr(SKBitmap source) =>
+        Scale(source, GameScale(source.Width, source.Height), contrast: false, nearest: true);
+
+    public static (SKBitmap Bitmap, float Scale) Scale(SKBitmap source, float scale, bool contrast) =>
+        Scale(source, scale, contrast, nearest: true);
+
+    public static (SKBitmap Bitmap, float Scale) Scale(SKBitmap source, float scale, bool contrast, bool nearest = true)
     {
         scale = Math.Max(1f, scale);
         var width = Math.Max(8, (int)Math.Round(source.Width * scale));
@@ -31,17 +22,30 @@ internal static class ImageEnhance
         using (var canvas = new SKCanvas(dest))
         {
             canvas.Clear(SKColors.Black);
-            canvas.DrawBitmap(source, SKRect.Create(width, height));
+            var sampling = nearest ? Nearest : new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
+            using var image = SKImage.FromBitmap(source);
+            canvas.DrawImage(image, SKRect.Create(source.Width, source.Height), SKRect.Create(width, height), sampling);
         }
 
         if (contrast)
-            StretchContrast(dest);
+            StretchContrast(dest, mild: true);
         return (dest, scale);
+    }
+
+    public static float GameScale(int width, int height)
+    {
+        var maxSide = Math.Max(width, height);
+        if (maxSide < 8)
+            return 2f;
+        var scale = 2.15f;
+        if (maxSide * scale > 2880)
+            scale = 2880f / maxSide;
+        return Math.Clamp(scale, 1.45f, 2.6f);
     }
 
     public static SKBitmap Invert(SKBitmap source)
     {
-        var dest = source.Copy() ?? throw new InvalidOperationException("Copia bitmap non riuscita.");
+        var dest = source.Copy() ?? throw new InvalidOperationException("Bitmap copy failed.");
         var n = dest.Width * dest.Height;
         var ptr = dest.GetPixels();
         if (ptr == IntPtr.Zero)
@@ -60,30 +64,94 @@ internal static class ImageEnhance
         return dest;
     }
 
-    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForPaper(SKBitmap source, ScreenRect box)
+    public static (SKBitmap Bitmap, float Scale) ForGameUi(SKBitmap source)
     {
-        var pad = Math.Max(12, Math.Min(box.Width, box.Height) / 18);
-        var x = Math.Clamp(box.X - pad, 0, Math.Max(0, source.Width - 1));
-        var y = Math.Clamp(box.Y - pad, 0, Math.Max(0, source.Height - 1));
-        var w = Math.Clamp(box.Width + pad * 2, 8, source.Width - x);
-        var h = Math.Clamp(box.Height + pad * 2, 8, source.Height - y);
-        var sourceBox = new ScreenRect(x, y, w, h);
+        using var isolated = IsolateBrightText(source);
+        return Scale(isolated, GameScale(source.Width, source.Height), contrast: false, nearest: true);
+    }
 
-        using var crop = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-        using (var canvas = new SKCanvas(crop))
+    public static bool LooksLikeGameUi(SKBitmap source)
+    {
+        var n = source.Width * source.Height;
+        var ptr = source.GetPixels();
+        if (ptr == IntPtr.Zero || n < 80)
+            return false;
+
+        var step = Math.Max(1, n / 2200);
+        var samples = 0;
+        var bright = 0;
+        var dark = 0;
+        var sat = 0;
+        long lumaSum = 0;
+        unsafe
         {
-            canvas.Clear(SKColors.White);
-            canvas.DrawBitmap(source, SKRect.Create(x, y, w, h), SKRect.Create(w, h));
+            var p = (byte*)ptr;
+            for (var i = 0; i < n; i += step)
+            {
+                var o = i * 4;
+                var b = p[o];
+                var g = p[o + 1];
+                var r = p[o + 2];
+                var luma = (r * 30 + g * 59 + b * 11) / 100;
+                lumaSum += luma;
+                samples++;
+                if (luma >= 168)
+                    bright++;
+                if (luma <= 70)
+                    dark++;
+                if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) >= 36)
+                    sat++;
+            }
         }
 
-        var minSide = Math.Min(w, h);
-        var maxSide = Math.Max(w, h);
-        var scale = Math.Clamp(1500f / Math.Max(8, minSide), 2.1f, 4.2f);
-        if (maxSide * scale > 2600)
-            scale = 2600f / maxSide;
-        var scaled = Scale(crop, scale, contrast: true);
-        return (scaled.Bitmap, scaled.Scale, sourceBox);
+        if (samples < 20)
+            return false;
+        var mean = lumaSum / (double)samples;
+        return mean < 155
+               && bright / (double)samples >= 0.012
+               && dark / (double)samples >= 0.12
+               && sat / (double)samples >= 0.18;
     }
+
+    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForLineRefine(SKBitmap source, ScreenRect box, bool isolateBright)
+    {
+        var crop = CropScale(source, box, padRatio: 12, minPad: 6, targetMin: 72, minScale: 2.8f, maxScale: 5.4f, cap: 1600, contrast: false);
+        if (!isolateBright)
+            return crop;
+
+        var isolated = IsolateBrightText(crop.Bitmap);
+        crop.Bitmap.Dispose();
+        return (isolated, crop.Scale, crop.SourceBox);
+    }
+
+    public static SKBitmap IsolateBrightText(SKBitmap source)
+    {
+        var dest = source.Copy() ?? throw new InvalidOperationException("Bitmap copy failed.");
+        var n = dest.Width * dest.Height;
+        var ptr = dest.GetPixels();
+        if (ptr == IntPtr.Zero)
+            return dest;
+
+        unsafe
+        {
+            var p = (byte*)ptr;
+            for (var i = 0; i < n; i++)
+            {
+                var o = i * 4;
+                var luma = (p[o + 2] * 30 + p[o + 1] * 59 + p[o] * 11) / 100;
+                var v = luma >= 158 ? (byte)255 : (byte)0;
+                p[o] = v;
+                p[o + 1] = v;
+                p[o + 2] = v;
+                p[o + 3] = 255;
+            }
+        }
+
+        return dest;
+    }
+
+    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForPaper(SKBitmap source, ScreenRect box) =>
+        CropScale(source, box, padRatio: 18, minPad: 12, targetMin: 1400, minScale: 2.0f, maxScale: 3.8f, cap: 2400, contrast: false);
 
     public static SKBitmap Rotate(SKBitmap source, float degrees)
     {
@@ -114,33 +182,42 @@ internal static class ImageEnhance
             (int)Math.Round(ny + sourceHeight / 2.0, MidpointRounding.AwayFromZero));
     }
 
-    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForTile(SKBitmap source, ScreenRect box)
-    {
-        var x = Math.Clamp(box.X, 0, Math.Max(0, source.Width - 1));
-        var y = Math.Clamp(box.Y, 0, Math.Max(0, source.Height - 1));
-        var w = Math.Clamp(box.Width, 8, source.Width - x);
-        var h = Math.Clamp(box.Height, 8, source.Height - y);
-        var sourceBox = new ScreenRect(x, y, w, h);
-
-        using var crop = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-        using (var canvas = new SKCanvas(crop))
-        {
-            canvas.Clear(SKColors.Black);
-            canvas.DrawBitmap(source, SKRect.Create(x, y, w, h), SKRect.Create(w, h));
-        }
-
-        var minSide = Math.Min(w, h);
-        var maxSide = Math.Max(w, h);
-        var scale = Math.Clamp(1100f / Math.Max(8, minSide), 1.6f, 3.4f);
-        if (maxSide * scale > 2000)
-            scale = 2000f / maxSide;
-        var scaled = Scale(crop, scale, contrast: true);
-        return (scaled.Bitmap, scaled.Scale, sourceBox);
-    }
+    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForTile(SKBitmap source, ScreenRect box) =>
+        CropScale(source, box, padRatio: 40, minPad: 4, targetMin: 1200, minScale: 1.8f, maxScale: 3.2f, cap: 2200, contrast: false);
 
     public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForSmallBox(SKBitmap source, ScreenRect box)
     {
-        var pad = Math.Max(6, Math.Max(box.Height / 3, 8));
+        var pad = Math.Max(8, Math.Max(box.Height / 2, 10));
+        return CropScale(source, new ScreenRect(box.X - pad, box.Y - pad, box.Width + pad * 2, box.Height + pad * 2),
+            padRatio: 80, minPad: 0, targetMin: 64, minScale: 2.4f, maxScale: 5.2f, cap: 1100, contrast: false);
+    }
+
+    public static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) ForHotspot(SKBitmap source, ScreenRect box) =>
+        CropScale(source, box, padRatio: 50, minPad: 8, targetMin: 1100, minScale: 2.0f, maxScale: 3.4f, cap: 2400, contrast: false);
+
+    public static IReadOnlyList<ScreenRect> GameHotspots(int width, int height)
+    {
+        if (width < 80 || height < 80)
+            return [];
+
+        var left = new ScreenRect(0, 0, Math.Max(80, width * 62 / 100), height);
+        var bottom = new ScreenRect(0, height * 52 / 100, width, Math.Max(80, height * 48 / 100));
+        var top = new ScreenRect(0, 0, width, Math.Max(80, height * 28 / 100));
+        return [left, bottom, top];
+    }
+
+    private static (SKBitmap Bitmap, float Scale, ScreenRect SourceBox) CropScale(
+        SKBitmap source,
+        ScreenRect box,
+        int padRatio,
+        int minPad,
+        float targetMin,
+        float minScale,
+        float maxScale,
+        float cap,
+        bool contrast)
+    {
+        var pad = minPad <= 0 ? 0 : Math.Max(minPad, Math.Min(box.Width, box.Height) / Math.Max(1, padRatio));
         var x = Math.Clamp(box.X - pad, 0, Math.Max(0, source.Width - 1));
         var y = Math.Clamp(box.Y - pad, 0, Math.Max(0, source.Height - 1));
         var w = Math.Clamp(box.Width + pad * 2, 8, source.Width - x);
@@ -151,18 +228,20 @@ internal static class ImageEnhance
         using (var canvas = new SKCanvas(crop))
         {
             canvas.Clear(SKColors.Black);
-            canvas.DrawBitmap(source, SKRect.Create(x, y, w, h), SKRect.Create(w, h));
+            using var image = SKImage.FromBitmap(source);
+            canvas.DrawImage(image, SKRect.Create(x, y, w, h), SKRect.Create(w, h), Nearest);
         }
 
-        var target = 52f;
-        var scale = Math.Clamp(target / Math.Max(8, h), 2.2f, 4.8f);
-        if (w * scale > 900)
-            scale = 900f / w;
-        var scaled = Scale(crop, scale, contrast: true);
+        var minSide = Math.Min(w, h);
+        var maxSide = Math.Max(w, h);
+        var scale = Math.Clamp(targetMin / Math.Max(8, minSide), minScale, maxScale);
+        if (maxSide * scale > cap)
+            scale = cap / maxSide;
+        var scaled = Scale(crop, scale, contrast, nearest: true);
         return (scaled.Bitmap, scaled.Scale, sourceBox);
     }
 
-    private static void StretchContrast(SKBitmap bitmap)
+    private static void StretchContrast(SKBitmap bitmap, bool mild)
     {
         var n = bitmap.Width * bitmap.Height;
         if (n < 16)
@@ -183,40 +262,43 @@ internal static class ImageEnhance
                 hist[l]++;
             }
 
-            var lowCut = Math.Max(1, n / 40);
-            var highCut = Math.Max(1, n / 40);
+            var cut = Math.Max(1, n / (mild ? 80 : 40));
             var acc = 0;
             var lo = 0;
             var hi = 255;
             for (var i = 0; i < 256; i++)
             {
                 acc += hist[i];
-                if (acc >= lowCut)
+                if (acc >= cut)
                 {
                     lo = i;
                     break;
                 }
             }
+
             acc = 0;
             for (var i = 255; i >= 0; i--)
             {
                 acc += hist[i];
-                if (acc >= highCut)
+                if (acc >= cut)
                 {
                     hi = i;
                     break;
                 }
             }
-            if (hi - lo < 28)
+
+            if (hi - lo < 40)
                 return;
 
             var span = (float)(hi - lo);
+            var strength = mild ? 0.55f : 1f;
             for (var i = 0; i < n; i++)
             {
                 var o = i * 4;
                 for (var c = 0; c < 3; c++)
                 {
-                    var v = (p[o + c] - lo) * 255f / span;
+                    var stretched = (p[o + c] - lo) * 255f / span;
+                    var v = p[o + c] * (1 - strength) + stretched * strength;
                     p[o + c] = (byte)Math.Clamp(v, 0, 255);
                 }
             }

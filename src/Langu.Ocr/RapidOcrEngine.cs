@@ -8,13 +8,15 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
 {
     private static readonly RapidOcrOptions Options = RapidOcrOptions.Default with
     {
-        Padding = 20,
-        TextScore = 0.16f,
-        BoxScoreThresh = 0.16f,
-        BoxThresh = 0.12f,
-        UnClipRatio = 1.75f,
-        DoAngle = true
+        Padding = 10,
+        TextScore = 0.22f,
+        BoxScoreThresh = 0.22f,
+        BoxThresh = 0.18f,
+        UnClipRatio = 1.4f,
+        DoAngle = false
     };
+
+    private static readonly RapidOcrOptions AngledOptions = Options with { DoAngle = true };
 
     private readonly object _initLock = new();
     private RapidOcr? _latin;
@@ -38,6 +40,13 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         CancellationToken cancellationToken) =>
         RunAsync(frame, languageHint, light: false, cancellationToken);
 
+    public Task<IReadOnlyList<OcrLine>> RecognizeAsync(
+        CapturedFrame frame,
+        string? languageHint,
+        CancellationToken cancellationToken,
+        bool light) =>
+        RunAsync(frame, languageHint, light, cancellationToken);
+
     public Task<IReadOnlyList<OcrLine>> RecognizeCjkAsync(
         CapturedFrame frame,
         CancellationToken cancellationToken) =>
@@ -56,23 +65,33 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
             return Task.FromResult<IReadOnlyList<OcrLine>>(Array.Empty<OcrLine>());
 
         using var original = BitmapConvert.ToSkia(frame);
+        var gameLike = ImageEnhance.LooksLikeGameUi(original);
+        var asian = AsianEngines();
         var enhanced = ImageEnhance.ForOcr(original);
         using var enhancedBitmap = enhanced.Bitmap;
-
         var lines = ReadAll(engines, enhancedBitmap, enhanced.Scale);
-        if (lines.Count == 0)
-            lines = ReadAll(engines, original, 1f);
-        if (!light && lines.Count == 0)
+        if (CountUseful(lines) < 2)
+            lines = Merge(lines, ReadAll(engines, original, 1f, AngledOptions));
+        if (!light && CountUseful(lines) < 2)
         {
             using var inverted = ImageEnhance.Invert(enhancedBitmap);
-            lines = ReadAll(engines, inverted, enhanced.Scale);
+            lines = Merge(lines, ReadAll(engines, inverted, enhanced.Scale));
         }
 
-        var paper = ReadPaper(engines, original);
-        lines = Merge(lines, paper);
-        if (paper.Count(l => LanguageDetector.HasCjk(l.Text)) < 6)
+        if (!light && CountUseful(lines) < 3 && gameLike && asian.Count > 0)
+        {
+            var game = ImageEnhance.ForGameUi(original);
+            using var gameBitmap = game.Bitmap;
+            lines = Merge(lines, ReadAll(asian, gameBitmap, game.Scale));
+        }
+
+        if (!light && CountUseful(lines) < 4)
+            lines = Merge(lines, ReadHotspots(asian.Count > 0 && gameLike ? asian : engines, original));
+        if (!light && !gameLike && CountUseful(lines) < 6)
+            lines = Merge(lines, ReadPaper(engines, original));
+        if (!light && CountUseful(lines) < 4)
             lines = Merge(lines, ReadTiles(engines, original));
-        if (!light)
+        if (!light && CountUseful(lines) < 6)
             lines = RefineSmall(engines, original, lines);
         return Task.FromResult<IReadOnlyList<OcrLine>>(Dedup(lines));
     }
@@ -81,39 +100,41 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
     {
         var hintIso = hint?.ToLowerInvariant();
         var list = new List<RapidOcr>();
-
-        if (LanguageDetector.IsCjkHint(hintIso))
-        {
-            var asian = hintIso is "zh" or "zho_hans" or "ko" or "kor_hang"
-                ? _cjk ?? _japan
-                : _japan ?? _cjk;
-            if (asian is not null)
-                list.Add(asian);
-            return list;
-        }
-
         if (_latin is not null)
             list.Add(_latin);
 
-        if (hintIso is "en" or "it" or "fr" or "de" or "es" or "pt" or "ru" or "ar")
-            return list;
-
-        var extra = _cjk ?? _japan;
-        if (extra is not null && !list.Contains(extra))
-            list.Add(extra);
+        var asian = hintIso is "zh" or "zho_hans" or "ko" or "kor_hang"
+            ? _cjk ?? _japan
+            : _japan ?? _cjk;
+        if (asian is not null && !list.Contains(asian))
+            list.Add(asian);
         return list;
     }
 
-    private static List<OcrLine> ReadAll(IReadOnlyList<RapidOcr> engines, SKBitmap bitmap, float imageScale)
+    private List<RapidOcr> AsianEngines()
     {
+        var asian = _japan ?? _cjk;
+        return asian is null ? [] : [asian];
+    }
+
+    private static int CountUseful(IReadOnlyList<OcrLine> lines) =>
+        lines.Count(l => LanguageDetector.HasCjk(l.Text) || LanguageDetector.IsUsefulOcr(l.Text));
+
+    private static List<OcrLine> ReadAll(
+        IReadOnlyList<RapidOcr> engines,
+        SKBitmap bitmap,
+        float imageScale,
+        RapidOcrOptions? options = null)
+    {
+        var opts = options ?? Options;
         if (engines.Count == 1)
-            return Read(engines[0], bitmap, imageScale);
+            return Read(engines[0], bitmap, imageScale, opts);
 
         var results = new List<OcrLine>[engines.Count];
         Parallel.For(0, engines.Count, i =>
         {
             using var copy = bitmap.Copy();
-            results[i] = copy is null ? [] : Read(engines[i], copy, imageScale);
+            results[i] = copy is null ? [] : Read(engines[i], copy, imageScale, opts);
         });
 
         var merged = new List<OcrLine>();
@@ -122,12 +143,12 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         return merged;
     }
 
-    private static List<OcrLine> Read(RapidOcr engine, SKBitmap bitmap, float imageScale)
+    private static List<OcrLine> Read(RapidOcr engine, SKBitmap bitmap, float imageScale, RapidOcrOptions options)
     {
         OcrResult result;
         try
         {
-            result = engine.Detect(bitmap, Options);
+            result = engine.Detect(bitmap, options);
         }
         catch
         {
@@ -146,7 +167,7 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
             if (bounds.IsEmpty || !KeepText(text, bounds))
                 continue;
 
-            var confidence = 0.75f;
+            var confidence = 0.62f;
             try
             {
                 if (block.CharScores is { Length: > 0 })
@@ -157,6 +178,8 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
                 // keep default
             }
 
+            if (LanguageDetector.HasCjk(text))
+                confidence = Math.Max(confidence, 0.42f);
             if (LanguageDetector.LooksLikeGarbage(text))
                 continue;
 
@@ -172,7 +195,10 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         return lines;
     }
 
-    private static List<OcrLine> RefineSmall(IReadOnlyList<RapidOcr> engines, SKBitmap original, List<OcrLine> lines)
+    private static List<OcrLine> RefineSmall(
+        IReadOnlyList<RapidOcr> engines,
+        SKBitmap original,
+        List<OcrLine> lines)
     {
         if (lines.Count == 0 || engines.Count == 0)
             return lines;
@@ -182,14 +208,19 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         var budget = 0;
         foreach (var line in lines)
         {
-            if (budget >= 8 || (line.Bounds.Height >= 20 && line.Bounds.Width >= 40 && LanguageDetector.IsUsefulOcr(line.Text)))
+            var cjk = LanguageDetector.HasCjk(line.Text);
+            var suspicious = LooksSuspiciousOcr(line.Text);
+            var skip = budget >= 18
+                       || (cjk && !suspicious && line.Bounds.Height >= 16 && line.Bounds.Width >= 28)
+                       || (!cjk && !suspicious && line.Confidence >= 0.72f && line.Bounds.Height >= 18 && line.Bounds.Width >= 36);
+            if (skip)
             {
                 refined.Add(line);
                 continue;
             }
 
             budget++;
-            var crop = ImageEnhance.ForSmallBox(original, line.Bounds);
+            var crop = ImageEnhance.ForLineRefine(original, line.Bounds, isolateBright: false);
             using var bitmap = crop.Bitmap;
             var found = ReadAll(engines, bitmap, 1f);
             if (found.Count == 0)
@@ -238,13 +269,57 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
 
     private static string PreferText(string original, string refined)
     {
+        if (string.IsNullOrWhiteSpace(refined))
+            return original;
+        if (LanguageDetector.LooksLikeGarbage(original) && !LanguageDetector.LooksLikeGarbage(refined))
+            return refined;
         if (!LanguageDetector.IsUsefulOcr(original) && LanguageDetector.IsUsefulOcr(refined))
             return refined;
         if (LanguageDetector.HasReliableCjk(refined) && !LanguageDetector.HasReliableCjk(original))
             return refined;
+        if (LooksSuspiciousOcr(original) && !LooksSuspiciousOcr(refined) && LanguageDetector.HasCjk(refined))
+            return refined;
+        var kanaGain = CountKana(refined) - CountKana(original);
+        if (kanaGain >= 2 && !LanguageDetector.LooksLikeGarbage(refined))
+            return refined;
         if (refined.Length > original.Length + 1 && !LanguageDetector.LooksLikeGarbage(refined))
             return refined;
-        return LanguageDetector.LooksLikeGarbage(original) ? refined : original;
+        return original;
+    }
+
+    private static bool LooksSuspiciousOcr(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+        if (!LanguageDetector.HasCjk(text))
+            return false;
+        var latin = text.Count(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or '+' or '=' or '*');
+        return latin > 0;
+    }
+
+    private static int CountKana(string text)
+    {
+        var n = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (rune.Value is >= 0x3040 and <= 0x30FF)
+                n++;
+        }
+
+        return n;
+    }
+
+    private static List<OcrLine> ReadHotspots(IReadOnlyList<RapidOcr> engines, SKBitmap original)
+    {
+        var merged = new List<OcrLine>();
+        foreach (var region in ImageEnhance.GameHotspots(original.Width, original.Height))
+        {
+            var crop = ImageEnhance.ForHotspot(original, region);
+            using var bitmap = crop.Bitmap;
+            merged = Merge(merged, MapCrop(ReadAll(engines, bitmap, crop.Scale), crop.SourceBox, crop.Scale));
+        }
+
+        return merged;
     }
 
     private static List<OcrLine> ReadPaper(IReadOnlyList<RapidOcr> engines, SKBitmap original)
@@ -374,8 +449,12 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         return tiles;
     }
 
-    private static bool KeepText(string text, ScreenRect bounds) =>
-        OcrLineFilter.ShouldTranslate(text) && !OcrLineFilter.IsLikelyIcon(text, bounds);
+    private static bool KeepText(string text, ScreenRect bounds)
+    {
+        if (LanguageDetector.HasCjk(text) && text.Trim().Length >= 1 && bounds.Area >= 80)
+            return !OcrLineFilter.IsLikelyIcon(text, bounds);
+        return OcrLineFilter.ShouldTranslate(text) && !OcrLineFilter.IsLikelyIcon(text, bounds);
+    }
 
     private static List<OcrLine> Merge(IReadOnlyList<OcrLine> primary, IReadOnlyList<OcrLine> extra)
     {
@@ -407,11 +486,19 @@ public sealed class RapidOcrEngine : IOcrEngine, IDisposable
         var curLatin = LanguageDetector.IsMostlyLatin(current.Text) && LanguageDetector.IsUsefulOcr(current.Text);
         var newLatin = LanguageDetector.IsMostlyLatin(candidate.Text) && LanguageDetector.IsUsefulOcr(candidate.Text);
 
-        if (newCjk && !curCjk && !curLatin)
+        if (newCjk && !curCjk)
             return true;
         if (curCjk && !newCjk)
             return false;
-        if (curLatin && !newCjk)
+        if (curCjk && newCjk)
+        {
+            if (LooksSuspiciousOcr(current.Text) && !LooksSuspiciousOcr(candidate.Text))
+                return true;
+            if (CountKana(candidate.Text) >= CountKana(current.Text) + 2)
+                return true;
+            return candidate.Text.Length > current.Text.Length + 4;
+        }
+        if (curLatin && !newCjk && !LanguageDetector.LooksLikeGarbage(current.Text))
             return false;
         if (newLatin && !curCjk && !curLatin)
             return true;

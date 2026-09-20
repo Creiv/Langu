@@ -21,9 +21,9 @@ def load_translator(model_dir):
     sp = spm.SentencePieceProcessor()
     sp_path = os.path.join(model_dir, "sentencepiece.bpe.model")
     if not os.path.isfile(sp_path):
-        raise FileNotFoundError(f"Manca sentencepiece.bpe.model in {model_dir}")
+        raise FileNotFoundError(f"Missing sentencepiece.bpe.model in {model_dir}")
     if not sp.load(sp_path):
-        raise RuntimeError("Impossibile caricare SentencePiece")
+        raise RuntimeError("Could not load SentencePiece")
 
     translator = ctranslate2.Translator(model_dir, device="cpu", compute_type="int8")
     return translator, sp
@@ -32,11 +32,15 @@ def load_translator(model_dir):
 def translate(translator, sp, text, src, tgt):
     tokens = sp.encode(text, out_type=str)
     source = [src] + tokens + ["</s>"]
-    max_len = min(512, max(48, len(tokens) * 3 + 16))
+    n = len(tokens)
+    short = n <= 18
+    max_len = min(512, 28 if short else max(64, n * 2 + 24))
     results = translator.translate_batch(
         [source],
         target_prefix=[[tgt]],
-        beam_size=1,
+        beam_size=2,
+        repetition_penalty=1.35 if short else 1.2,
+        no_repeat_ngram_size=3,
         max_decoding_length=max_len,
         max_input_length=512,
     )
@@ -51,7 +55,7 @@ def translate(translator, sp, text, src, tgt):
 def main():
     configure_stdio()
     if len(sys.argv) < 2:
-        emit({"ok": False, "event": "fatal", "error": "Manca la cartella del modello NLLB"})
+        emit({"ok": False, "event": "fatal", "error": "Missing NLLB model folder"})
         return 2
 
     model_dir = sys.argv[1]
@@ -69,7 +73,7 @@ def main():
         try:
             req = json.loads(line)
         except Exception as exc:
-            emit({"ok": False, "error": f"JSON non valido: {exc}"})
+            emit({"ok": False, "error": f"Invalid JSON: {exc}"})
             continue
 
         cmd = req.get("cmd", "translate")

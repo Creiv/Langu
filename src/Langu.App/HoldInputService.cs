@@ -34,6 +34,7 @@ public sealed class HoldInputService : IDisposable
     public Action<int, int>? FocusPickStarted { get; set; }
     public Action<int, int>? FocusPickMoved { get; set; }
     public Action<int, int>? FocusPickEnded { get; set; }
+    public Action<int, int>? PointerMoved { get; set; }
     public event Action<int>? KeyCaptured;
 
     public HoldInputService(Dispatcher dispatcher)
@@ -214,6 +215,24 @@ public sealed class HoldInputService : IDisposable
 
         if (!Armed || !_held)
             return User32.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+
+        if (msg == NativeConstants.WmMouseMove)
+        {
+            var move = Marshal.PtrToStructure<MsLlHookStruct>(lParam);
+            _lastMx = move.Pt.X;
+            _lastMy = move.Pt.Y;
+            if (!_movePosted)
+            {
+                _movePosted = true;
+                Post(() =>
+                {
+                    _movePosted = false;
+                    PointerMoved?.Invoke(_lastMx, _lastMy);
+                });
+            }
+
+            return User32.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+        }
 
         if (msg is NativeConstants.WmRButtonDown or NativeConstants.WmRButtonUp or NativeConstants.WmRButtonDblClk)
         {

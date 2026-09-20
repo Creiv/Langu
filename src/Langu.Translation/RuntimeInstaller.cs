@@ -13,9 +13,9 @@ public sealed class RuntimeInstaller
     private static readonly (string File, string Label)[] ModelFiles =
     [
         ("config.json", "NLLB config"),
-        ("shared_vocabulary.json", "NLLB vocabolario"),
+        ("shared_vocabulary.json", "NLLB vocabulary"),
         ("sentencepiece.bpe.model", "NLLB tokenizer"),
-        ("model.bin", "NLLB modello (~600 MB)")
+        ("model.bin", "NLLB model (~600 MB)")
     ];
 
     public bool ModelsPresent =>
@@ -36,7 +36,7 @@ public sealed class RuntimeInstaller
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromHours(2) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Langu/1.1");
         return client;
     }
 
@@ -71,11 +71,11 @@ public sealed class RuntimeInstaller
     private static async Task EnsurePipAndPackagesAsync(IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
     {
         if (!File.Exists(AppPaths.PythonExe))
-            throw new InvalidOperationException("Python runtime non trovato.");
+            throw new InvalidOperationException("Python runtime not found.");
 
         if (!await CanImportAsync("ctranslate2", cancellationToken))
         {
-            progress?.Report(new DownloadProgress { Stage = "Installazione pip e CTranslate2" });
+            progress?.Report(new DownloadProgress { Stage = "Installing pip and CTranslate2" });
             var getPip = Path.Combine(AppPaths.PythonDir, "get-pip.py");
             if (!File.Exists(getPip))
             {
@@ -88,7 +88,7 @@ public sealed class RuntimeInstaller
         }
 
         if (!await CanImportAsync("ctranslate2", cancellationToken))
-            throw new InvalidOperationException("Impossibile importare CTranslate2 nel runtime Python.");
+            throw new InvalidOperationException("Could not import CTranslate2 in the Python runtime.");
     }
 
     private static Task EnsureWorkerAsync()
@@ -97,7 +97,7 @@ public sealed class RuntimeInstaller
         if (!File.Exists(source))
             source = Path.Combine(AppContext.BaseDirectory, "Runtime", "translator_worker.py");
         if (!File.Exists(source))
-            throw new FileNotFoundException("translator_worker.py non trovato nel pacchetto Langu.");
+            throw new FileNotFoundException("translator_worker.py is missing from the Langu package.");
 
         File.Copy(source, AppPaths.WorkerScript, overwrite: true);
         return Task.CompletedTask;
@@ -142,14 +142,14 @@ public sealed class RuntimeInstaller
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Impossibile avviare Python.");
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start Python.");
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
         var output = await stdoutTask;
         var err = await stderrTask;
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Python fallito ({process.ExitCode}): {err} {output}".Trim());
+            throw new InvalidOperationException($"Python failed ({process.ExitCode}): {err} {output}".Trim());
         return process.ExitCode;
     }
 }

@@ -44,6 +44,7 @@ public sealed class AppHost : IDisposable
         _input.FocusPickStarted = Pipeline.BeginFocusPick;
         _input.FocusPickMoved = Pipeline.UpdateFocusPick;
         _input.FocusPickEnded = Pipeline.EndFocusPick;
+        _input.PointerMoved = Pipeline.SetPointer;
         _input.KeyCaptured += OnKeyCaptured;
         _input.Start();
 
@@ -97,11 +98,11 @@ public sealed class AppHost : IDisposable
                 SettingsWindow.Dispatcher.Invoke(() => SettingsWindow.SetDownload(p.Stage + extra, fraction));
             });
             await Pipeline.PrepareModelsAsync(progress, CancellationToken.None);
-            SettingsWindow.Dispatcher.Invoke(() => SettingsWindow.SetDownload("Modelli pronti. Puoi usare Langu offline.", 1));
+            SettingsWindow.Dispatcher.Invoke(() => SettingsWindow.SetDownload("Models ready. You can use Langu offline.", 1));
         }
         catch (Exception ex)
         {
-            SettingsWindow.Dispatcher.Invoke(() => SettingsWindow.SetDownload("Errore: " + ex.Message, 0));
+            SettingsWindow.Dispatcher.Invoke(() => SettingsWindow.SetDownload("Error: " + ex.Message, 0));
             MessageBox.Show(ex.Message, "Langu", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally

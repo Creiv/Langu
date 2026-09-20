@@ -63,10 +63,12 @@ public sealed class WindowsOcrEngine : IOcrEngine
                 if (!Keep(text, union))
                     continue;
                 var quad = TextQuad.FromWordBoxes(boxes);
+                if (quad.IsValid && quad.Bounds.Height > union.Height + 2)
+                    quad = TextQuad.FromRect(union);
                 lines.Add(new OcrLine
                 {
                     Text = text,
-                    Bounds = quad.IsValid ? quad.Bounds : union,
+                    Bounds = union,
                     Quad = quad,
                     Confidence = 0.75f
                 });

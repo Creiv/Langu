@@ -42,8 +42,8 @@ internal static class SmokeTest
                 Dummy("定休日 水曜日", new ScreenRect(80, 230, 220, 26)),
                 Dummy("ご来店ありがとう", new ScreenRect(80, 260, 250, 26))
             ]);
-            Expect(log, grouped.Count == 1 && grouped[0].SourceText.Contains('\n') && grouped[0].SourceText.Contains("定休日", StringComparison.Ordinal),
-                $"join lines '{grouped[0].SourceText.Replace('\n', '|')}'");
+            Expect(log, grouped.Count == 3 && OcrReadingLayout.Group(grouped)[0].Kind == ReadingKind.Sentence,
+                $"keep lines '{string.Join('|', grouped.Select(i => i.SourceText))}'");
             var tilted = TextQuad.FromPoints([
                 new ScreenPoint(40, 20), new ScreenPoint(180, 60),
                 new ScreenPoint(172, 88), new ScreenPoint(32, 48)
@@ -148,13 +148,28 @@ internal static class SmokeTest
         AppPaths.EnsureCreated();
         try
         {
-            using var ocr = new RapidOcrEngine();
             using var bitmap = new Bitmap(path);
-            var lines = ocr.RecognizeAsync(ToFrame(bitmap), null, CancellationToken.None).GetAwaiter().GetResult();
-            var text = string.Join(Environment.NewLine, lines.Select(l => l.Text));
+            using var scaled = ScaleForOcr(bitmap);
+            var frame = ToFrame(scaled);
+            using var ocr = new OcrEngineSelector();
+            var report = new List<string>();
+            foreach (var kind in new[] { OcrEngineKind.Windows, OcrEngineKind.RapidOcr, OcrEngineKind.Auto })
+            {
+                ocr.Configure(kind);
+                var lines = Task.Run(async () => await ocr.RecognizeAsync(frame, null, CancellationToken.None))
+                    .GetAwaiter()
+                    .GetResult();
+                var heights = lines.Select(l => l.Bounds.Height).OrderBy(h => h).ToList();
+                var median = heights.Count == 0 ? 0 : heights[heights.Count / 2];
+                report.Add($"=== {kind} count={lines.Count} medianH={median} maxH={(heights.Count == 0 ? 0 : heights[^1])} ===");
+                report.AddRange(lines.Select(l => $"{l.Bounds.Width}x{l.Bounds.Height} @ {l.Bounds.X},{l.Bounds.Y}  {l.Text}"));
+                report.Add("");
+            }
+
+            var text = string.Join(Environment.NewLine, report);
             File.WriteAllText(Path.Combine(AppPaths.Root, "ocr-file.txt"), text);
             Console.WriteLine(text);
-            return lines.Count > 0 ? 0 : 3;
+            return report.Any(l => l.StartsWith("=== Auto") && l.Contains("count=0")) ? 3 : 0;
         }
         catch (Exception ex)
         {
@@ -168,13 +183,13 @@ internal static class SmokeTest
         var sample = FindUp("tests", "pcsx2-sample.png");
         if (sample is null)
         {
-            log.Add("SKIP pcsx2 sample assente");
+            log.Add("SKIP pcsx2 sample missing");
             return;
         }
 
         if (!OcrModelInstaller.CjkReady)
         {
-            log.Add("SKIP pcsx2 (modelli CJK assenti — usa Scarica modelli)");
+            log.Add("SKIP pcsx2 (CJK models missing — use Download models)");
             return;
         }
 
@@ -206,6 +221,11 @@ internal static class SmokeTest
         var iconLines = ocr.RecognizeAsync(ToFrame(icons), null, CancellationToken.None).GetAwaiter().GetResult();
         var kept = iconLines.Count(l => !OcrLineFilter.IsLikelyIcon(l.Text, l.Bounds));
         Expect(log, kept <= iconLines.Count, $"OCR icons kept={kept}/{iconLines.Count}");
+
+        using var game = RenderBusyGame();
+        var gameLines = ocr.RecognizeAsync(ToFrame(game), "ja", CancellationToken.None).GetAwaiter().GetResult();
+        var gameText = string.Join(" | ", gameLines.Select(l => l.Text));
+        Expect(log, LanguageDetector.HasCjk(gameText), $"OCR game ui '{gameText}'");
     }
 
     private static List<OverlayItem> ToItems(IReadOnlyList<OcrLine> lines) =>
@@ -249,6 +269,34 @@ internal static class SmokeTest
         using var font = CjkFont(34);
         g.DrawString("斜めの看板", font, new SolidBrush(System.Drawing.Color.FromArgb(255, 90, 45, 20)), 0, 0);
         g.ResetTransform();
+        return bitmap;
+    }
+
+    private static Bitmap RenderBusyGame()
+    {
+        var bitmap = new Bitmap(960, 540, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bitmap);
+        g.Clear(System.Drawing.Color.FromArgb(255, 18, 92, 48));
+        var rnd = new Random(7);
+        for (var i = 0; i < 180; i++)
+        {
+            using var brush = new SolidBrush(System.Drawing.Color.FromArgb(
+                255, rnd.Next(10, 70), rnd.Next(70, 160), rnd.Next(20, 90)));
+            g.FillEllipse(brush, rnd.Next(-20, 940), rnd.Next(-20, 520), rnd.Next(30, 140), rnd.Next(20, 90));
+        }
+
+        using var font = CjkFont(18);
+        using var outline = new SolidBrush(System.Drawing.Color.FromArgb(220, 10, 10, 10));
+        using var ink = System.Drawing.Brushes.White;
+        var lines = new[] { "天下統一に向けて兵力を蓄え", "着々と準備を進めていた伊達軍", "片倉小十郎", "竜の宝" };
+        var y = 48;
+        foreach (var line in lines)
+        {
+            g.DrawString(line, font, outline, 36, y + 1);
+            g.DrawString(line, font, ink, 35, y);
+            y += line.Length <= 6 ? 70 : 28;
+        }
+
         return bitmap;
     }
 
@@ -338,6 +386,19 @@ internal static class SmokeTest
         g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
         g.DrawImage(chip, new Rectangle(40, 80, 480, 72));
         return bitmap;
+    }
+
+    private static Bitmap ScaleForOcr(Bitmap source)
+    {
+        var max = Math.Max(source.Width, source.Height);
+        var scale = max > 1600 ? 1600.0 / max : 1.0;
+        var width = Math.Max(8, (int)Math.Round(source.Width * scale));
+        var height = Math.Max(8, (int)Math.Round(source.Height * scale));
+        var dest = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(dest);
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g.DrawImage(source, 0, 0, width, height);
+        return dest;
     }
 
     private static CapturedFrame ToFrame(Bitmap bitmap)

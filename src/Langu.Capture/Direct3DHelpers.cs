@@ -22,7 +22,7 @@ internal static class Direct3DHelpers
             DeviceCreationFlags.BgraSupport,
             [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0, FeatureLevel.Level_10_0],
             out var device).CheckError();
-        return device ?? throw new InvalidOperationException("Impossibile creare il dispositivo D3D11.");
+        return device ?? throw new InvalidOperationException("Could not create the D3D11 device.");
     }
 
     public static IDirect3DDevice CreateWinRtDevice(ID3D11Device device)

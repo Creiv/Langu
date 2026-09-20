@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -264,8 +263,8 @@ public partial class OverlayWindow : Window, IOverlayController
             var a = toDip.Transform(new Point(item.Shape.P0.X, item.Shape.P0.Y));
             var b = toDip.Transform(new Point(item.Shape.P1.X, item.Shape.P1.Y));
             var d = toDip.Transform(new Point(item.Shape.P3.X, item.Shape.P3.Y));
-            var length = Math.Max(10, Dist(a, b));
-            var thick = Math.Max(10, Dist(a, d));
+            var length = Math.Max(4, Dist(a, b));
+            var thick = Math.Max(4, Dist(a, d));
             var cx = (toDip.Transform(new Point(item.Shape.CenterX, item.Shape.CenterY)).X) - origin.X;
             var cy = (toDip.Transform(new Point(item.Shape.CenterX, item.Shape.CenterY)).Y) - origin.Y;
             RootCanvas.Children.Add(BuildBox(
@@ -285,8 +284,8 @@ public partial class OverlayWindow : Window, IOverlayController
         return (
             Math.Floor(p.X - origin.X),
             Math.Floor(p.Y - origin.Y),
-            Math.Max(8, Math.Ceiling(q.X - p.X)),
-            Math.Max(8, Math.Ceiling(q.Y - p.Y)));
+            Math.Max(4, Math.Ceiling(q.X - p.X)),
+            Math.Max(4, Math.Ceiling(q.Y - p.Y)));
     }
 
     private static double Dist(Point a, Point b)
@@ -296,56 +295,56 @@ public partial class OverlayWindow : Window, IOverlayController
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    private Border BuildBox(OverlayItem item, double x, double y, double w, double h, double rotate)
+    private UIElement BuildBox(OverlayItem item, double x, double y, double w, double h, double rotate)
     {
-        UIElement? child = null;
-        Brush background;
-        Brush border;
-        var thickness = new Thickness(item.Kind == OverlayItemKind.Probe ? 1.3 : 0);
-
-        if (item.Kind == OverlayItemKind.Probe)
+        var probe = item.Kind is OverlayItemKind.Probe or OverlayItemKind.Busy;
+        var fill = probe
+            ? HighlightFill(item)
+            : Color.FromRgb(item.Appearance.FillR, item.Appearance.FillG, item.Appearance.FillB);
+        UIElement? child = item.Kind switch
         {
-            background = new SolidColorBrush(Color.FromArgb(0x66, 30, 90, 220));
-            border = new SolidColorBrush(Color.FromArgb(0xDD, 90, 160, 255));
-        }
-        else
-        {
-            background = new SolidColorBrush(Color.FromArgb(
-                0xF6,
-                item.Appearance.FillR,
-                item.Appearance.FillG,
-                item.Appearance.FillB));
-            border = Brushes.Transparent;
-            child = item.Kind == OverlayItemKind.Busy
-                ? BuildBusyMark(item.Appearance, w, h)
-                : FitLabel(
-                    string.IsNullOrWhiteSpace(item.TranslatedText) ? item.SourceText : item.TranslatedText,
-                    item.Appearance,
-                    w,
-                    h,
-                    item);
-        }
+            OverlayItemKind.Probe => null,
+            OverlayItemKind.Busy => BuildBusyMark(item.Appearance, w, h),
+            _ => FitLabel(
+                string.IsNullOrWhiteSpace(item.TranslatedText) ? item.SourceText : item.TranslatedText,
+                item.Appearance,
+                w,
+                h,
+                item)
+        };
 
-        var box = new Border
+        var root = new Grid
         {
             Width = w,
             Height = h,
-            CornerRadius = new CornerRadius(2),
-            Background = background,
-            BorderBrush = border,
-            BorderThickness = thickness,
-            Padding = item.Kind == OverlayItemKind.Probe ? new Thickness(0) : new Thickness(5, 3, 5, 3),
-            Child = child,
+            Background = new SolidColorBrush(fill),
             ClipToBounds = true,
             IsHitTestVisible = false,
-            SnapsToDevicePixels = true,
-            UseLayoutRounding = true,
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = Math.Abs(rotate) >= 1 ? new RotateTransform(rotate) : Transform.Identity
         };
-        Canvas.SetLeft(box, Math.Round(x));
-        Canvas.SetTop(box, Math.Round(y));
-        return box;
+        if (item.Highlighted && item.Kind == OverlayItemKind.Translated)
+        {
+            root.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(
+                    0x46, item.Appearance.TextR, item.Appearance.TextG, item.Appearance.TextB))
+            });
+        }
+
+        if (child is not null)
+            root.Children.Add(child);
+        Canvas.SetLeft(root, Math.Round(x));
+        Canvas.SetTop(root, Math.Round(y));
+        return root;
+    }
+
+    private static Color HighlightFill(OverlayItem item)
+    {
+        var look = item.Appearance;
+        var strong = item.Highlighted || item.Kind == OverlayItemKind.Busy;
+        var alpha = strong ? (byte)0x8C : (byte)0x32;
+        return Color.FromArgb(alpha, look.TextR, look.TextG, look.TextB);
     }
 
     private static UIElement BuildBusyMark(TextAppearance look, double boxW, double boxH)
@@ -382,10 +381,8 @@ public partial class OverlayWindow : Window, IOverlayController
         return row;
     }
 
-    private TextBlock FitLabel(string value, TextAppearance look, double boxW, double boxH, OverlayItem item)
+    private static UIElement FitLabel(string value, TextAppearance look, double boxW, double boxH, OverlayItem item)
     {
-        var innerW = Math.Max(8, boxW - 10);
-        var innerH = Math.Max(8, boxH - 8);
         var display = value.Replace("\r\n", "\n").Trim();
         var asian = LanguageDetector.HasCjk(display)
                     || LanguageDetector.HasCjk(item.SourceText) && !LanguageDetector.IsMostlyLatin(display);
@@ -393,60 +390,30 @@ public partial class OverlayWindow : Window, IOverlayController
         if (banner && LanguageDetector.HasCjk(display) && !display.Contains('\n') && display.Length is > 1 and <= 18)
             display = string.Join('\n', display.EnumerateRunes().Select(r => r.ToString()));
 
-        var lineCount = Math.Max(1, display.Split('\n').Length);
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        if (dpi < 0.5)
-            dpi = 1;
-        var typeface = new Typeface(
-            new FontFamily("Segoe UI, Microsoft YaHei UI, Yu Gothic UI, Meiryo UI"),
-            FontStyles.Normal,
-            look.Bold ? FontWeights.SemiBold : FontWeights.Regular,
-            FontStretches.Normal);
-        var ink = new SolidColorBrush(Color.FromRgb(look.TextR, look.TextG, look.TextB));
-
-        var lo = 6.0;
-        var hi = Math.Max(7, Math.Min(innerH * 0.9 / Math.Max(1, lineCount * 0.1 + 0.55), innerW * 0.98));
-        var best = lo;
-        for (var i = 0; i < 16; i++)
-        {
-            var mid = (lo + hi) / 2;
-            var formatted = new FormattedText(
-                display,
-                CultureInfo.CurrentUICulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                mid,
-                ink,
-                dpi);
-            formatted.MaxTextWidth = innerW;
-            formatted.Trimming = TextTrimming.None;
-            formatted.LineHeight = mid * 1.12;
-            if (formatted.Height <= innerH * 0.98 && formatted.Width <= innerW + 2)
-            {
-                best = mid;
-                lo = mid;
-            }
-            else
-            {
-                hi = mid;
-            }
-        }
-
-        return new TextBlock
+        var sourceLines = item.SourceText.Replace("\r\n", "\n").Count(c => c == '\n') + 1;
+        var wrap = (display.Contains('\n') || sourceLines >= 2) && boxH >= 28;
+        var fontSize = Math.Clamp(boxH * 0.86, 7, 96);
+        var label = new TextBlock
         {
             Text = display,
-            Foreground = ink,
-            FontFamily = typeface.FontFamily,
-            FontSize = best,
+            Foreground = new SolidColorBrush(Color.FromRgb(look.TextR, look.TextG, look.TextB)),
+            FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI, Yu Gothic UI, Meiryo UI"),
+            FontSize = fontSize,
             FontWeight = look.Bold ? FontWeights.SemiBold : FontWeights.Regular,
-            TextWrapping = TextWrapping.Wrap,
+            TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             TextAlignment = asian || banner ? TextAlignment.Center : TextAlignment.Left,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Top,
-            LineHeight = best * 1.12,
-            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-            Width = innerW,
-            MaxHeight = innerH,
+            TextTrimming = TextTrimming.None,
+            Width = wrap ? Math.Max(4, boxW) : double.NaN,
+            IsHitTestVisible = false
+        };
+
+        return new Viewbox
+        {
+            Width = boxW,
+            Height = boxH,
+            Stretch = Stretch.Uniform,
+            StretchDirection = StretchDirection.DownOnly,
+            Child = label,
             IsHitTestVisible = false
         };
     }

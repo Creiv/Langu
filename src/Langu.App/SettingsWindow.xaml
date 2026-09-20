@@ -24,12 +24,12 @@
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                         <Ellipse x:Name="StatusDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
                                  Fill="{StaticResource MutedBrush}"/>
-                        <TextBlock x:Name="StatusText" Style="{StaticResource FieldLabel}" Margin="0" Text="In pausa"/>
+                        <TextBlock x:Name="StatusText" Style="{StaticResource FieldLabel}" Margin="0" Text="Paused"/>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="StartButton" Style="{StaticResource PrimaryButton}" Content="Avvia" Click="OnStart"/>
-                    <Button x:Name="PauseButton" Content="Pausa" Click="OnPause" Margin="0"/>
+                    <Button x:Name="StartButton" Style="{StaticResource PrimaryButton}" Content="Start" Click="OnStart"/>
+                    <Button x:Name="PauseButton" Content="Pause" Click="OnPause" Margin="0"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -40,8 +40,8 @@
                 <TextBlock x:Name="DownloadText" Style="{StaticResource FieldLabel}" Margin="0,0,0,8"/>
                 <TextBlock x:Name="WarningText" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8"/>
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Style="{StaticResource QuietButton}" Content="Nascondi" Click="OnHide" Margin="0"/>
-                    <Button Style="{StaticResource QuietButton}" Content="Scarica modelli" Click="OnDownload"/>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource QuietButton}" Content="Hide" Click="OnHide" Margin="0"/>
+                    <Button Style="{StaticResource QuietButton}" Content="Download models" Click="OnDownload"/>
                 </DockPanel>
             </StackPanel>
         </Border>
@@ -50,9 +50,9 @@
             <StackPanel>
                 <Border Style="{StaticResource CardStyle}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Come si usa"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="How to use"/>
                         <TextBlock Style="{StaticResource FieldLabel}" Margin="0,0,0,12" TextWrapping="Wrap"
-                                   Text="1. Avvia  ·  2. Tieni premuto il tasto  ·  3. Sinistro una box, destro tutte, rotella un'area da rileggere. Doppio tap sul tasto: cancella tutto e interrompe OCR/traduzioni."/>
+                                   Text="1. Start  ·  2. Hold the key  ·  3. Left-click one line, right-click all, middle-drag an area to rescan. Double-tap the key: clear everything and cancel OCR/translations."/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -60,18 +60,18 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Tasto"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Key"/>
                                 <ComboBox x:Name="ProbeKeyBox" SelectionChanged="OnSettingsChanged"/>
                                 <Button x:Name="CaptureKeyButton" Style="{StaticResource QuietButton}"
-                                        Content="Premi un tasto…" Click="OnCaptureKey" Margin="0,4,0,0" HorizontalAlignment="Left"/>
+                                        Content="Press a key…" Click="OnCaptureKey" Margin="0,4,0,0" HorizontalAlignment="Left"/>
                             </StackPanel>
                             <StackPanel Grid.Column="2">
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Traduci in"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="Translate into"/>
                                 <ComboBox x:Name="TargetLanguageBox" SelectionChanged="OnSettingsChanged">
-                                    <ComboBoxItem Content="Italiano"/>
+                                    <ComboBoxItem Content="Italian"/>
                                     <ComboBoxItem Content="English"/>
                                 </ComboBox>
-                                <Button Style="{StaticResource QuietButton}" Content="Pulisci traduzioni"
+                                <Button Style="{StaticResource QuietButton}" Content="Clear translations"
                                         Click="OnClearPins" Margin="0,4,0,0" HorizontalAlignment="Left"/>
                             </StackPanel>
                         </Grid>
@@ -80,51 +80,51 @@
 
                 <Border Style="{StaticResource CardStyle}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Cosa leggere"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="What to read"/>
                         <WrapPanel Margin="0,0,0,10">
                             <RadioButton x:Name="ModeMonitor" Content="Monitor" Checked="OnCaptureModeChanged"/>
-                            <RadioButton x:Name="ModeWindow" Content="Finestra" Checked="OnCaptureModeChanged"/>
-                            <RadioButton x:Name="ModeRegion" Content="Regione" Checked="OnCaptureModeChanged"/>
+                            <RadioButton x:Name="ModeWindow" Content="Window" Checked="OnCaptureModeChanged"/>
+                            <RadioButton x:Name="ModeRegion" Content="Region" Checked="OnCaptureModeChanged"/>
                         </WrapPanel>
                         <StackPanel x:Name="MonitorPanel">
                             <TextBlock Style="{StaticResource FieldLabel}" Text="Monitor"/>
                             <ComboBox x:Name="MonitorBox" SelectionChanged="OnSettingsChanged"/>
                         </StackPanel>
                         <StackPanel x:Name="WindowPanel">
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="Finestra"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="Window"/>
                             <ComboBox x:Name="WindowBox" DisplayMemberPath="Title" SelectionChanged="OnSettingsChanged"/>
                             <WrapPanel Margin="0,2,0,0">
-                                <Button Style="{StaticResource QuietButton}" Content="Aggiorna" Click="OnRefreshWindows"/>
-                                <Button Style="{StaticResource QuietButton}" Content="Scegli cliccando" Click="OnPickWindow"/>
+                                <Button Style="{StaticResource QuietButton}" Content="Refresh" Click="OnRefreshWindows"/>
+                                <Button Style="{StaticResource QuietButton}" Content="Click to pick" Click="OnPickWindow"/>
                             </WrapPanel>
                         </StackPanel>
                         <StackPanel x:Name="RegionPanel">
-                            <TextBlock x:Name="RegionSummary" Style="{StaticResource FieldLabel}" Text="Nessuna regione"/>
-                            <Button Style="{StaticResource QuietButton}" Content="Seleziona regione" Click="OnPickRegion" HorizontalAlignment="Left"/>
+                            <TextBlock x:Name="RegionSummary" Style="{StaticResource FieldLabel}" Text="No region"/>
+                            <Button Style="{StaticResource QuietButton}" Content="Select region" Click="OnPickRegion" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource CardStyle}" Margin="0">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Riconoscimento"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="Lingua a schermo"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="Recognition"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="On-screen language"/>
                         <ComboBox x:Name="SourceLanguageBox" SelectionChanged="OnSettingsChanged"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="Motore"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="Engine"/>
                         <ComboBox x:Name="OcrBox" SelectionChanged="OnOcrChanged">
-                            <ComboBoxItem Content="Auto — Windows, Rapid solo se serve"/>
-                            <ComboBoxItem Content="Windows — latino, veloce e preciso"/>
-                            <ComboBoxItem Content="RapidOCR — asiatico, più lento"/>
+                            <ComboBoxItem Content="Auto — Windows first, Rapid only if needed"/>
+                            <ComboBoxItem Content="Windows — Latin, fast and accurate"/>
+                            <ComboBoxItem Content="RapidOCR — Asian scripts, slower"/>
                         </ComboBox>
                         <TextBlock x:Name="OcrHintText" Style="{StaticResource FieldLabel}" Margin="0,0,0,10"
-                                   Text="Windows legge il testo normale. Rapid cerca in parallelo giapponese, cinese e coreano nel video."/>
-                        <TextBlock x:Name="FpsLabel" Style="{StaticResource FieldLabel}" Text="Reattività col tasto premuto"/>
+                                   Text="Windows reads normal text. Rapid only fills gaps for Japanese, Chinese, and Korean."/>
+                        <TextBlock x:Name="FpsLabel" Style="{StaticResource FieldLabel}" Text="Hold-key responsiveness"/>
                         <Slider x:Name="FpsSlider" Minimum="1" Maximum="6" Value="3" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OnFpsChanged"/>
-                        <CheckBox x:Name="OverlayCheck" Content="Mostra box e traduzioni" IsChecked="True" Click="OnSettingsChanged"/>
+                        <CheckBox x:Name="OverlayCheck" Content="Show boxes and translations" IsChecked="True" Click="OnSettingsChanged"/>
                         <TextBlock x:Name="ModelsStatusText" Style="{StaticResource FieldLabel}" Margin="0,10,0,0"
-                                   Text="Stato modelli: in attesa."/>
+                                   Text="Models: waiting."/>
                         <TextBlock Style="{StaticResource FieldLabel}" Margin="0,8,0,0"
-                                   Text="Ctrl+Shift+P avvia/pausa  ·  W finestra  ·  R regione  ·  L IT/EN"/>
+                                   Text="Ctrl+Shift+P start/pause  ·  W window  ·  R region  ·  L IT/EN"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

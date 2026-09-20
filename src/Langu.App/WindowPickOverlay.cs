@@ -20,7 +20,7 @@ public sealed class WindowPickOverlay : System.Windows.Window
         WindowState = WindowState.Maximized;
         Content = new System.Windows.Controls.TextBlock
         {
-            Text = "Clicca la finestra da tradurre  ·  Esc per annullare",
+            Text = "Click the window to translate  ·  Esc to cancel",
             Foreground = Brushes.White,
             FontSize = 22,
             FontFamily = new FontFamily("Segoe UI"),

@@ -57,10 +57,10 @@ public partial class SettingsWindow : Window
         if (ModelsStatusText is not null)
         {
             ModelsStatusText.Text = status.ModelsReady
-                ? "Modelli OCR e traduzione pronti (offline)."
+                ? "OCR and translation models ready (offline)."
                 : OcrModelInstaller.CjkReady
-                    ? "OCR pronto. Per tradurre: Scarica modelli."
-                    : "OCR Windows ok. Scarica i modelli per CJK e traduzione.";
+                    ? "OCR ready. To translate: Download models."
+                    : "Windows OCR is ready. Download models for CJK and translation.";
         }
         StartButton.IsEnabled = !status.Running;
         PauseButton.IsEnabled = status.Running;
@@ -167,9 +167,9 @@ public partial class SettingsWindow : Window
             return;
         OcrHintText.Text = OcrBox.SelectedIndex switch
         {
-            1 => "Ideale per YouTube, browser e testo a serif/sans. Non legge bene kanji e hiragana stilizzati.",
-            2 => "Più lento, ma legge giapponese, cinese e coreano. Usa origine Giapponese/Cinese se puoi.",
-            _ => "Windows legge il testo normale. Rapid cerca in parallelo giapponese, cinese e coreano nel video."
+            1 => "Best for YouTube, browsers, and normal Latin text. Weak on stylized kanji and hiragana.",
+            2 => "Slower, but reads Japanese, Chinese, and Korean. Set the on-screen language if you can.",
+            _ => "Windows reads normal text. Rapid only fills gaps for Japanese, Chinese, and Korean."
         };
     }
 
@@ -179,7 +179,7 @@ public partial class SettingsWindow : Window
             return;
         var s = _host.Settings;
         RegionSummary.Text = s.RegionBounds.IsEmpty
-            ? "Nessuna regione selezionata"
+            ? "No region selected"
             : $"{s.RegionWidth}×{s.RegionHeight}  ·  {s.RegionX},{s.RegionY}";
     }
 
@@ -205,7 +205,7 @@ public partial class SettingsWindow : Window
     private void OnFpsChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (FpsLabel is not null)
-            FpsLabel.Text = $"Reattività col tasto premuto: {(int)e.NewValue}";
+            FpsLabel.Text = $"Hold-key responsiveness: {(int)e.NewValue}";
         if (IsLoaded)
             Persist();
     }
@@ -257,7 +257,7 @@ public partial class SettingsWindow : Window
 
     private void OnCaptureKey(object sender, RoutedEventArgs e)
     {
-        CaptureKeyButton.Content = "Premi ora…";
+        CaptureKeyButton.Content = "Press now…";
         _host.Input.CaptureNextKey = true;
     }
 
@@ -285,6 +285,6 @@ public partial class SettingsWindow : Window
             ProbeKeyBox.SelectedItem = extra;
         }
 
-        CaptureKeyButton.Content = "Premi un tasto…";
+        CaptureKeyButton.Content = "Press a key…";
     }
 }

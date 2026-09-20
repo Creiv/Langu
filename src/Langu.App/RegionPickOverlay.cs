@@ -32,7 +32,7 @@ public sealed class RegionPickOverlay : System.Windows.Window
         _canvas.Children.Add(_rect);
         var hint = new TextBlock
         {
-            Text = "Trascina per selezionare la regione  ·  Esc per annullare",
+            Text = "Drag to select a region  ·  Esc to cancel",
             Foreground = Brushes.White,
             FontSize = 22,
             Margin = new Thickness(24, 32, 0, 0)

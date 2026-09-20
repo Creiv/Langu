@@ -8,6 +8,8 @@ public static class OcrMergeRules
         var b = extra.Text.Trim();
         if (extra.Shape.IsTilted && !current.Shape.IsTilted)
             return extra;
+        if (LanguageDetector.HasCjk(b) && !LanguageDetector.HasCjk(a))
+            return extra;
         if (LanguageDetector.HasReliableCjk(b) && !LanguageDetector.HasReliableCjk(a))
             return extra;
         if (b.Length >= 8 && a.Contains(b, StringComparison.OrdinalIgnoreCase) && !extra.Shape.IsTilted)
